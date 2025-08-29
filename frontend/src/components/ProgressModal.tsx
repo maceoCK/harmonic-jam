@@ -23,6 +23,8 @@ interface ProgressModalProps {
   onClose: () => void;
   onComplete?: () => void;
   webSocketMessage?: any;
+  initialTotal?: number;
+  initialProcessed?: number;
 }
 
 const ProgressModal: React.FC<ProgressModalProps> = ({
@@ -32,12 +34,25 @@ const ProgressModal: React.FC<ProgressModalProps> = ({
   onClose,
   onComplete,
   webSocketMessage,
+  initialTotal = 0,
+  initialProcessed = 0,
 }) => {
   const [status, setStatus] = useState<IBulkOperationStatus | null>(null);
   const [progress, setProgress] = useState(0);
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('');
-  const [processedCount, setProcessedCount] = useState(0);
-  const [totalCount, setTotalCount] = useState(0);
+  const [processedCount, setProcessedCount] = useState(initialProcessed);
+  const [totalCount, setTotalCount] = useState(initialTotal);
+
+  // Reset state when modal opens with new operation
+  useEffect(() => {
+    if (open && initialTotal > 0) {
+      setTotalCount(initialTotal);
+      setProcessedCount(initialProcessed);
+      setProgress(0);
+      setEstimatedTimeRemaining('');
+      setStatus(null);
+    }
+  }, [open, initialTotal, initialProcessed]);
 
   useEffect(() => {
     if (webSocketMessage && webSocketMessage.operation_id === operationId) {

@@ -44,6 +44,7 @@ export const useWebSocket = (
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          console.log('WebSocket message received:', data);
           setLastMessage(data);
         } catch (error) {
           console.error('Failed to parse WebSocket message:', error);
@@ -102,7 +103,7 @@ export const useWebSocket = (
     return () => {
       disconnect();
     };
-  }, [url, connect, disconnect]);
+  }, [url]); // Remove connect and disconnect from dependencies to avoid loops
 
   return {
     sendMessage,

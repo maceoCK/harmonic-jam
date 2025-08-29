@@ -4,6 +4,8 @@ export interface ICompany {
     id: number;
     company_name: string;
     liked: boolean;
+    industry?: string;
+    description?: string;
 }
 
 export interface ICollection {
@@ -11,6 +13,7 @@ export interface ICollection {
     collection_name: string;
     companies: ICompany[];
     total: number;
+    collection_count?: number;
 }
 
 export interface ICompanyBatchResponse {

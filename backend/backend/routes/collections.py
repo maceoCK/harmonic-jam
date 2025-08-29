@@ -20,6 +20,7 @@ router = APIRouter(
 class CompanyCollectionMetadata(BaseModel):
     id: uuid.UUID
     collection_name: str
+    collection_count: int = 0
 
 
 class CompanyCollectionOutput(CompanyBatchOutput, CompanyCollectionMetadata):
@@ -32,10 +33,19 @@ def get_all_collection_metadata(
 ):
     collections = db.query(database.CompanyCollection).all()
 
+    # Get counts for each collection
+    collection_counts = {}
+    for collection in collections:
+        count = db.query(database.CompanyCollectionAssociation).filter(
+            database.CompanyCollectionAssociation.collection_id == collection.id
+        ).count()
+        collection_counts[collection.id] = count
+
     return [
         CompanyCollectionMetadata(
             id=collection.id,
             collection_name=collection.collection_name,
+            collection_count=collection_counts.get(collection.id, 0),
         )
         for collection in collections
     ]

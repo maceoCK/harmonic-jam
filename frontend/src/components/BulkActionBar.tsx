@@ -72,45 +72,49 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
   if (selectedCount === 0) {
     return (
-      <Paper
-        elevation={3}
+      <Box
         sx={{
-          p: 2,
-          mb: 2,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          backgroundColor: 'background.paper',
+          height: 48,
         }}
       >
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
           Select companies to perform bulk actions
         </Typography>
         <Button
           variant="outlined"
+          size="small"
           startIcon={<SelectAllIcon />}
           onClick={onSelectAll}
           disabled={isLoading || totalInCollection === 0}
+          sx={{
+            textTransform: 'none',
+            borderColor: '#dadce0',
+            color: '#5f6368',
+            '&:hover': {
+              backgroundColor: 'rgba(26, 115, 232, 0.04)',
+              borderColor: '#dadce0',
+            },
+          }}
         >
           Select All ({totalInCollection.toLocaleString()})
         </Button>
-      </Paper>
+      </Box>
     );
   }
 
   return (
-    <Paper
-      elevation={3}
+    <Box
       sx={{
-        p: 2,
-        mb: 2,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        backgroundColor: 'primary.dark',
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
+        minHeight: 56,
+        px: 1,
+        bgcolor: '#e8f0fe',
+        borderRadius: 1,
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -120,8 +124,12 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
               ? `All ${selectedCount.toLocaleString()} companies selected`
               : `${selectedCount.toLocaleString()} selected`
           }
-          color="primary"
-          variant={isAllSelected ? "filled" : "outlined"}
+          sx={{
+            bgcolor: '#1a73e8',
+            color: 'white',
+            fontWeight: 500,
+            fontSize: '0.8125rem',
+          }}
         />
         
         {!isAllSelected && totalInCollection > selectedCount && (
@@ -130,6 +138,14 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
             variant="text"
             onClick={onSelectAll}
             disabled={isLoading}
+            sx={{
+              textTransform: 'none',
+              color: '#1a73e8',
+              fontSize: '0.875rem',
+              '&:hover': {
+                bgcolor: 'rgba(26, 115, 232, 0.08)',
+              },
+            }}
           >
             Select all {totalInCollection.toLocaleString()}
           </Button>
@@ -137,25 +153,46 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        {isLoading && <CircularProgress size={20} />}
+        {isLoading && <CircularProgress size={20} sx={{ color: '#1a73e8' }} />}
         
         <Button
           variant="contained"
-          color="primary"
+          size="small"
           startIcon={<AddIcon />}
           onClick={handleAddClick}
           disabled={isLoading || targetCollections.length === 0}
+          sx={{
+            textTransform: 'none',
+            bgcolor: '#1a73e8',
+            '&:hover': {
+              bgcolor: '#1967d2',
+              boxShadow: '0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15)',
+            },
+          }}
         >
-          Add to...
+          Add to collection
         </Button>
         
         <Menu
           anchorEl={addMenuAnchor}
           open={Boolean(addMenuAnchor)}
           onClose={handleAddClose}
+          PaperProps={{
+            elevation: 1,
+            sx: {
+              mt: 1,
+              '& .MuiMenuItem-root': {
+                fontSize: '0.875rem',
+                color: '#202124',
+                '&:hover': {
+                  bgcolor: '#f1f3f4',
+                },
+              },
+            },
+          }}
         >
-          <MenuItem disabled>
-            <Typography variant="caption">Add to collection:</Typography>
+          <MenuItem disabled sx={{ fontSize: '0.75rem', color: '#5f6368' }}>
+            Add to collection:
           </MenuItem>
           <Divider />
           {targetCollections.map((collection) => (
@@ -171,12 +208,21 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
         {currentCollection && (
           <Button
             variant="outlined"
-            color="error"
+            size="small"
             startIcon={<RemoveIcon />}
             onClick={handleRemoveFromCollection}
             disabled={isLoading}
+            sx={{
+              textTransform: 'none',
+              borderColor: '#dadce0',
+              color: '#5f6368',
+              '&:hover': {
+                bgcolor: 'rgba(0, 0, 0, 0.04)',
+                borderColor: '#dadce0',
+              },
+            }}
           >
-            Remove from {currentCollection.collection_name}
+            Remove from collection
           </Button>
         )}
 
@@ -184,12 +230,12 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
           onClick={clearSelection}
           disabled={isLoading}
           size="small"
-          color="inherit"
+          sx={{ color: '#5f6368' }}
         >
-          <CloseIcon />
+          <CloseIcon fontSize="small" />
         </IconButton>
       </Box>
-    </Paper>
+    </Box>
   );
 };
 

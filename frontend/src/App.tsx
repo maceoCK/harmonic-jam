@@ -2,7 +2,7 @@ import "./App.css";
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { Snackbar, Alert } from "@mui/material";
+import { Snackbar, Alert, Box, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Chip, Container } from "@mui/material";
 import { useEffect, useState, useCallback } from "react";
 import CompanyTable from "./components/CompanyTable";
 import BulkActionBar from "./components/BulkActionBar";
@@ -18,9 +18,142 @@ import useApi from "./utils/useApi";
 import useWebSocket from "./hooks/useWebSocket";
 import { SelectionProvider, useSelection } from "./contexts/SelectionContext";
 
-const darkTheme = createTheme({
+// Professional light theme inspired by Google Docs
+const lightTheme = createTheme({
   palette: {
-    mode: "dark",
+    mode: 'light',
+    primary: {
+      main: '#1a73e8', // Google blue
+      light: '#4285f4',
+      dark: '#1967d2',
+    },
+    secondary: {
+      main: '#5f6368', // Google grey
+      light: '#80868b',
+      dark: '#3c4043',
+    },
+    background: {
+      default: '#ffffff',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#202124',
+      secondary: '#5f6368',
+    },
+    divider: '#e8eaed',
+    success: {
+      main: '#188038',
+    },
+    error: {
+      main: '#d33b27',
+    },
+  },
+  typography: {
+    fontFamily: '"Google Sans", "Roboto", "Helvetica", "Arial", sans-serif',
+    h1: {
+      fontSize: '2rem',
+      fontWeight: 400,
+      letterSpacing: 0,
+    },
+    h2: {
+      fontSize: '1.5rem',
+      fontWeight: 400,
+      letterSpacing: 0,
+    },
+    h5: {
+      fontSize: '1.125rem',
+      fontWeight: 500,
+    },
+    body1: {
+      fontSize: '0.875rem',
+      lineHeight: 1.5,
+    },
+    body2: {
+      fontSize: '0.8125rem',
+      lineHeight: 1.5,
+    },
+  },
+  shape: {
+    borderRadius: 8,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 500,
+          borderRadius: 4,
+          padding: '6px 24px',
+          boxShadow: 'none',
+          '&:hover': {
+            boxShadow: '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)',
+          },
+        },
+        contained: {
+          '&:hover': {
+            boxShadow: '0 1px 2px 0 rgba(60,64,67,0.3), 0 2px 6px 2px rgba(60,64,67,0.15)',
+          },
+        },
+        outlined: {
+          borderColor: '#dadce0',
+          '&:hover': {
+            backgroundColor: 'rgba(26, 115, 232, 0.04)',
+            borderColor: '#dadce0',
+          },
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          boxShadow: '0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15)',
+        },
+        elevation0: {
+          boxShadow: 'none',
+          border: '1px solid #e8eaed',
+        },
+        elevation1: {
+          boxShadow: '0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15)',
+        },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: {
+          borderRadius: 16,
+          fontWeight: 500,
+          fontSize: '0.8125rem',
+        },
+      },
+    },
+    MuiLinearProgress: {
+      styleOverrides: {
+        root: {
+          borderRadius: 4,
+          backgroundColor: '#e8eaed',
+        },
+        bar: {
+          borderRadius: 4,
+        },
+      },
+    },
+    MuiDataGrid: {
+      styleOverrides: {
+        root: {
+          border: 'none',
+          '& .MuiDataGrid-cell': {
+            borderBottom: '1px solid #e8eaed',
+          },
+          '& .MuiDataGrid-columnHeaders': {
+            backgroundColor: '#f8f9fa',
+            borderBottom: '1px solid #e8eaed',
+          },
+          '& .MuiDataGrid-footerContainer': {
+            borderTop: '1px solid #e8eaed',
+          },
+        },
+      },
+    },
   },
 });
 
@@ -38,6 +171,8 @@ function AppContent() {
   const [currentOperation, setCurrentOperation] = useState<{
     id: string;
     title: string;
+    total?: number;
+    processed?: number;
   } | null>(null);
   const [notification, setNotification] = useState<{
     open: boolean;
@@ -91,17 +226,33 @@ function AppContent() {
         setConfirmDialog(prev => ({ ...prev, open: false }));
         setIsProcessing(true);
         try {
-          // Set the operation first to establish WebSocket connection
           const operationTitle = `Adding ${companyIds.length.toLocaleString()} companies to ${targetCollection?.collection_name}`;
+          
+          // Generate predictable operation ID that matches backend format
+          const timestamp = Math.floor(Date.now() / 1000);
+          const predictedOperationId = `add_${targetCollectionId}_${timestamp}`;
+          
+          // Set the operation state FIRST to establish WebSocket connection
+          setCurrentOperation({
+            id: predictedOperationId,
+            title: operationTitle,
+            total: companyIds.length,
+            processed: 0
+          });
+          
+          // Wait for WebSocket to connect
+          await new Promise(resolve => setTimeout(resolve, 200));
           
           // Start the bulk operation
           const response = await bulkAddCompanies(targetCollectionId, companyIds);
           
-          // Set the operation state which will trigger WebSocket connection
-          setCurrentOperation({
-            id: response.operation_id,
-            title: operationTitle
-          });
+          // Update with actual operation ID if different
+          if (response.operation_id !== predictedOperationId) {
+            setCurrentOperation(prev => prev ? {
+              ...prev,
+              id: response.operation_id
+            } : null);
+          }
         } catch (error) {
           console.error('Error adding companies:', error);
           setNotification({
@@ -110,6 +261,7 @@ function AppContent() {
             severity: 'error'
           });
           setIsProcessing(false);
+          setCurrentOperation(null);
         }
       }
     });
@@ -131,17 +283,33 @@ function AppContent() {
         setConfirmDialog(prev => ({ ...prev, open: false }));
         setIsProcessing(true);
         try {
-          // Set the operation first to establish WebSocket connection
           const operationTitle = `Removing ${companyIds.length.toLocaleString()} companies from ${currentCollection?.collection_name}`;
+          
+          // Generate predictable operation ID that matches backend format
+          const timestamp = Math.floor(Date.now() / 1000);
+          const predictedOperationId = `remove_${selectedCollectionId}_${timestamp}`;
+          
+          // Set the operation state FIRST to establish WebSocket connection
+          setCurrentOperation({
+            id: predictedOperationId,
+            title: operationTitle,
+            total: companyIds.length,
+            processed: 0
+          });
+          
+          // Wait for WebSocket to connect
+          await new Promise(resolve => setTimeout(resolve, 200));
           
           // Start the bulk operation
           const response = await bulkRemoveCompanies(selectedCollectionId, companyIds);
           
-          // Set the operation state which will trigger WebSocket connection
-          setCurrentOperation({
-            id: response.operation_id,
-            title: operationTitle
-          });
+          // Update with actual operation ID if different
+          if (response.operation_id !== predictedOperationId) {
+            setCurrentOperation(prev => prev ? {
+              ...prev,
+              id: response.operation_id
+            } : null);
+          }
         } catch (error) {
           console.error('Error removing companies:', error);
           setNotification({
@@ -150,6 +318,7 @@ function AppContent() {
             severity: 'error'
           });
           setIsProcessing(false);
+          setCurrentOperation(null);
         }
       }
     });
@@ -169,52 +338,100 @@ function AppContent() {
   }, [clearSelection]);
 
   return (
-    <>
-      <div className="mx-8">
-        <div className="font-bold text-xl border-b p-2 mb-4 text-left">
-          Harmonic Jam
-        </div>
-        <div className="flex">
-          <div className="w-1/5">
-            <p className=" font-bold border-b mb-2 pb-2 text-left">
-              Collections
-            </p>
-            <div className="flex flex-col gap-2 text-left">
-              {collectionResponse?.map((collection) => {
-                return (
-                  <div
-                    key={collection.id}
-                    className={`py-1 pl-4 hover:cursor-pointer hover:bg-orange-300 ${
-                      selectedCollectionId === collection.id &&
-                      "bg-orange-500 font-bold"
-                    }`}
-                    onClick={() => {
-                      setSelectedCollectionId(collection.id);
+    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f8f9fa' }}>
+      {/* Sidebar */}
+      <Paper
+        elevation={0}
+        sx={{
+          width: 260,
+          borderRight: '1px solid #e8eaed',
+          bgcolor: 'background.paper',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {/* Logo/Title */}
+        <Box sx={{ p: 3, borderBottom: '1px solid #e8eaed' }}>
+          <Typography variant="h5" sx={{ fontWeight: 500, color: 'text.primary' }}>
+            Harmonic Jam
+          </Typography>
+        </Box>
+        
+        {/* Collections */}
+        <Box sx={{ p: 2, flex: 1, overflow: 'auto' }}>
+          <Typography
+            variant="overline"
+            sx={{ px: 1, color: 'text.secondary', fontSize: '0.75rem', fontWeight: 500 }}
+          >
+            Collections
+          </Typography>
+          <List sx={{ mt: 1 }}>
+            {collectionResponse?.map((collection) => (
+              <ListItem key={collection.id} disablePadding>
+                <ListItemButton
+                  selected={selectedCollectionId === collection.id}
+                  onClick={() => setSelectedCollectionId(collection.id)}
+                  sx={{
+                    borderRadius: 1,
+                    mb: 0.5,
+                    '&.Mui-selected': {
+                      bgcolor: 'rgba(26, 115, 232, 0.08)',
+                      '&:hover': {
+                        bgcolor: 'rgba(26, 115, 232, 0.12)',
+                      },
+                    },
+                    '&:hover': {
+                      bgcolor: 'rgba(0, 0, 0, 0.04)',
+                    },
+                  }}
+                >
+                  <ListItemText 
+                    primary={collection.collection_name}
+                    primaryTypographyProps={{
+                      fontSize: '0.875rem',
+                      fontWeight: selectedCollectionId === collection.id ? 500 : 400,
                     }}
-                  >
-                    {collection.collection_name}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="w-4/5 ml-4">
-            {selectedCollectionId && collectionResponse && (
-              <>
-                <BulkActionBar
-                  collections={collectionResponse}
-                  currentCollectionId={selectedCollectionId}
-                  onBulkAdd={handleBulkAdd}
-                  onBulkRemove={handleBulkRemove}
-                  onSelectAll={handleSelectAll}
-                  isLoading={isProcessing}
-                />
-                <CompanyTable selectedCollectionId={selectedCollectionId} />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
+                  />
+                  <Chip
+                    label={collection.collection_count || 0}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: '0.75rem',
+                      bgcolor: selectedCollectionId === collection.id ? 'primary.main' : '#e8eaed',
+                      color: selectedCollectionId === collection.id ? 'white' : 'text.secondary',
+                    }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Paper>
+
+      {/* Main Content */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff' }}>
+        {selectedCollectionId && collectionResponse && (
+          <>
+            {/* Action Bar */}
+            <Box sx={{ p: 2, borderBottom: '1px solid #e8eaed' }}>
+              <BulkActionBar
+                collections={collectionResponse}
+                currentCollectionId={selectedCollectionId}
+                onBulkAdd={handleBulkAdd}
+                onBulkRemove={handleBulkRemove}
+                onSelectAll={handleSelectAll}
+                isLoading={isProcessing}
+              />
+            </Box>
+            
+            {/* Table */}
+            <Box sx={{ flex: 1, p: 2 }}>
+              <CompanyTable selectedCollectionId={selectedCollectionId} />
+            </Box>
+          </>
+        )}
+      </Box>
       
       <ConfirmationDialog
         open={confirmDialog.open}
@@ -235,6 +452,8 @@ function AppContent() {
         onClose={() => setCurrentOperation(null)}
         onComplete={handleOperationComplete}
         webSocketMessage={lastMessage}
+        initialTotal={currentOperation?.total}
+        initialProcessed={currentOperation?.processed}
       />
       
       <Snackbar
@@ -251,13 +470,13 @@ function AppContent() {
           {notification.message}
         </Alert>
       </Snackbar>
-    </>
+    </Box>
   );
 }
 
 function App() {
   return (
-    <ThemeProvider theme={darkTheme}>
+    <ThemeProvider theme={lightTheme}>
       <CssBaseline />
       <SelectionProvider>
         <AppContent />
