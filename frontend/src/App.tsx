@@ -9,6 +9,7 @@ import EnhancedCompanyTable from "./components/EnhancedCompanyTable";
 import BulkActionBar from "./components/BulkActionBar";
 import ConfirmationDialog from "./components/ConfirmationDialog";
 import ConflictResolutionDialog, { ConflictInfo } from "./components/ConflictResolutionDialog";
+import ClearStatusesDialog from "./components/ClearStatusesDialog";
 import ProgressModal from "./components/ProgressModal";
 import { 
   getCollectionsMetadata, 
@@ -16,6 +17,7 @@ import {
   bulkRemoveCompanies,
   getAllCompanyIdsInCollection,
   checkConflicts,
+  checkStatuses,
   IConflictCheckResponse,
 } from "./utils/jam-api";
 import useApi from "./utils/useApi";
@@ -198,7 +200,115 @@ function AppContent() {
     companyIds: [],
   });
   
+  const [clearStatusesDialog, setClearStatusesDialog] = useState<{
+    open: boolean;
+    totalSelected: number;
+    likedCount: number;
+    ignoredCount: number;
+    noStatusCount: number;
+    likedIds: number[];
+    ignoredIds: number[];
+  }>({
+    open: false,
+    totalSelected: 0,
+    likedCount: 0,
+    ignoredCount: 0,
+    noStatusCount: 0,
+    likedIds: [],
+    ignoredIds: [],
+  });
+  
   const { selectAll, clearSelection, getSelectedIds, selectedCompanyIds } = useSelection();
+  
+  const handleClearStatuses = useCallback(async (companyIds: number[]) => {
+    const likedCollection = collectionResponse?.find(c => c.collection_name === 'Liked Companies List');
+    const ignoreCollection = collectionResponse?.find(c => c.collection_name === 'Companies to Ignore List');
+    
+    if (!likedCollection || !ignoreCollection) {
+      console.error('Could not find liked or ignore collections');
+      return;
+    }
+    
+    // First check which companies actually have statuses
+    setIsProcessing(true);
+    try {
+      const statusCheck = await checkStatuses({ company_ids: companyIds });
+      setIsProcessing(false);
+      
+      // Store the status check data for the dialog
+      setClearStatusesDialog({
+        open: true,
+        totalSelected: companyIds.length,
+        likedCount: statusCheck.liked_count,
+        ignoredCount: statusCheck.ignored_count,
+        noStatusCount: statusCheck.no_status_count,
+        likedIds: statusCheck.liked_ids,
+        ignoredIds: statusCheck.ignored_ids,
+      });
+    } catch (error) {
+      console.error('Error checking statuses:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to check company statuses',
+        severity: 'error',
+      });
+      setIsProcessing(false);
+    }
+  }, [collectionResponse]);
+  
+  const handleClearStatusesConfirm = useCallback(async () => {
+    setClearStatusesDialog(prev => ({ ...prev, open: false }));
+    
+    const likedCollection = collectionResponse?.find(c => c.collection_name === 'Liked Companies List');
+    const ignoreCollection = collectionResponse?.find(c => c.collection_name === 'Companies to Ignore List');
+    
+    if (!likedCollection || !ignoreCollection) {
+      console.error('Could not find liked or ignore collections');
+      return;
+    }
+    
+    setIsProcessing(true);
+    try {
+      // Remove from both liked and ignore collections
+      const promises = [];
+      
+      // Only remove from liked list if there are liked companies
+      if (clearStatusesDialog.likedCount > 0) {
+        promises.push(bulkRemoveCompanies(likedCollection.id, clearStatusesDialog.likedIds).catch(err => {
+          console.log('Error removing from liked list:', err);
+        }));
+      }
+      
+      // Only remove from ignore list if there are ignored companies  
+      if (clearStatusesDialog.ignoredCount > 0) {
+        promises.push(bulkRemoveCompanies(ignoreCollection.id, clearStatusesDialog.ignoredIds).catch(err => {
+          console.log('Error removing from ignore list:', err);
+        }));
+      }
+      
+      await Promise.all(promises);
+      
+      const totalCleared = clearStatusesDialog.likedCount + clearStatusesDialog.ignoredCount;
+      setNotification({
+        open: true,
+        message: `Cleared statuses for ${totalCleared} companies`,
+        severity: 'success',
+      });
+      
+      // Refresh the table
+      window.location.reload();
+    } catch (error) {
+      console.error('Error clearing statuses:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to clear statuses',
+        severity: 'error',
+      });
+    } finally {
+      setIsProcessing(false);
+      clearSelection();
+    }
+  }, [collectionResponse, clearStatusesDialog, clearSelection]);
   
   // WebSocket connection for progress updates
   const wsUrl = currentOperation 
@@ -463,6 +573,7 @@ function AppContent() {
                   onBulkAdd={handleBulkAdd}
                   onBulkRemove={handleBulkRemove}
                   onSelectAll={handleSelectAll}
+                  onClearStatuses={handleClearStatuses}
                   isLoading={isProcessing}
                 />
               </Box>
@@ -478,6 +589,16 @@ function AppContent() {
           </>
         )}
       </Box>
+      
+      <ClearStatusesDialog
+        open={clearStatusesDialog.open}
+        onClose={() => setClearStatusesDialog(prev => ({ ...prev, open: false }))}
+        onConfirm={handleClearStatusesConfirm}
+        totalSelected={clearStatusesDialog.totalSelected}
+        likedCount={clearStatusesDialog.likedCount}
+        ignoredCount={clearStatusesDialog.ignoredCount}
+        noStatusCount={clearStatusesDialog.noStatusCount}
+      />
       
       <ConflictResolutionDialog
         open={conflictDialog.open}

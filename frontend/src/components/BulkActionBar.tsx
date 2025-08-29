@@ -20,6 +20,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ClearIcon from '@mui/icons-material/Clear';
 import { useSelection } from '../contexts/SelectionContext';
 import { ICollection } from '../utils/jam-api';
 
@@ -29,6 +30,7 @@ interface BulkActionBarProps {
   onBulkAdd: (targetCollectionId: string, companyIds: number[]) => void;
   onBulkRemove: (companyIds: number[]) => void;
   onSelectAll: () => void;
+  onClearStatuses?: (companyIds: number[]) => void;
   isLoading?: boolean;
 }
 
@@ -38,6 +40,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   onBulkAdd,
   onBulkRemove,
   onSelectAll,
+  onClearStatuses,
   isLoading = false,
 }) => {
   const {
@@ -70,6 +73,13 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
     const ids = getSelectedIds();
     onBulkRemove(ids);
   }, [getSelectedIds, onBulkRemove]);
+  
+  const handleClearStatuses = useCallback(() => {
+    const ids = getSelectedIds();
+    if (onClearStatuses) {
+      onClearStatuses(ids);
+    }
+  }, [getSelectedIds, onClearStatuses]);
 
   // Get available target collections (exclude current)
   const targetCollections = collections.filter(c => c.id !== currentCollectionId);
@@ -142,7 +152,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         {isLoading && <CircularProgress size={20} sx={{ color: '#1a73e8' }} />}
         
-        {/* My List: Like, Ignore, Delete */}
+        {/* My List: Like, Ignore, Clear Statuses, Delete */}
         {isMyList && (
           <>
             <Button
@@ -179,6 +189,25 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
               }}
             >
               Ignore
+            </Button>
+            
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ClearIcon />}
+              onClick={handleClearStatuses}
+              disabled={isLoading || !onClearStatuses}
+              sx={{
+                textTransform: 'none',
+                borderColor: '#1a73e8',
+                color: '#1a73e8',
+                '&:hover': {
+                  bgcolor: 'rgba(26, 115, 232, 0.04)',
+                  borderColor: '#1a73e8',
+                },
+              }}
+            >
+              Clear Statuses
             </Button>
           </>
         )}

@@ -150,3 +150,25 @@ export async function checkConflicts(request: IConflictCheckRequest): Promise<IC
         throw error;
     }
 }
+
+export interface IStatusCheckRequest {
+    company_ids: number[];
+}
+
+export interface IStatusCheckResponse {
+    liked_count: number;
+    ignored_count: number;
+    no_status_count: number;
+    liked_ids: number[];
+    ignored_ids: number[];
+}
+
+export async function checkStatuses(request: IStatusCheckRequest): Promise<IStatusCheckResponse> {
+    try {
+        const response = await axios.post(`${BASE_URL}/companies/check-statuses`, request);
+        return response.data;
+    } catch (error) {
+        console.error('Error checking statuses:', error);
+        throw error;
+    }
+}
