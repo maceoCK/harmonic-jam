@@ -2,10 +2,12 @@ import "./App.css";
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
+import { Snackbar, Alert } from "@mui/material";
 import { useEffect, useState, useCallback } from "react";
 import CompanyTable from "./components/CompanyTable";
 import BulkActionBar from "./components/BulkActionBar";
 import ConfirmationDialog from "./components/ConfirmationDialog";
+import ProgressModal from "./components/ProgressModal";
 import { 
   getCollectionsMetadata, 
   bulkAddCompanies, 
@@ -13,6 +15,7 @@ import {
   getAllCompanyIdsInCollection,
 } from "./utils/jam-api";
 import useApi from "./utils/useApi";
+import useWebSocket from "./hooks/useWebSocket";
 import { SelectionProvider, useSelection } from "./contexts/SelectionContext";
 
 const darkTheme = createTheme({
@@ -32,8 +35,23 @@ function AppContent() {
     onConfirm: () => void;
   }>({ open: false, title: '', message: '', itemCount: 0, onConfirm: () => {} });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [currentOperation, setCurrentOperation] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [notification, setNotification] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({ open: false, message: '', severity: 'info' });
   
   const { selectAll, clearSelection, getSelectedIds } = useSelection();
+  
+  // WebSocket connection for progress updates
+  const wsUrl = currentOperation 
+    ? `ws://localhost:8000/ws/operations/${currentOperation.id}`
+    : null;
+  const { lastMessage } = useWebSocket(wsUrl);
 
   useEffect(() => {
     setSelectedCollectionId(collectionResponse?.[0]?.id);
@@ -73,13 +91,18 @@ function AppContent() {
         setConfirmDialog(prev => ({ ...prev, open: false }));
         setIsProcessing(true);
         try {
-          await bulkAddCompanies(targetCollectionId, companyIds);
-          clearSelection();
-          // TODO: Add success notification
+          const response = await bulkAddCompanies(targetCollectionId, companyIds);
+          setCurrentOperation({
+            id: response.operation_id,
+            title: `Adding ${companyIds.length.toLocaleString()} companies to ${targetCollection?.collection_name}`
+          });
         } catch (error) {
           console.error('Error adding companies:', error);
-          // TODO: Add error notification
-        } finally {
+          setNotification({
+            open: true,
+            message: 'Failed to start bulk add operation',
+            severity: 'error'
+          });
           setIsProcessing(false);
         }
       }
@@ -102,18 +125,36 @@ function AppContent() {
         setConfirmDialog(prev => ({ ...prev, open: false }));
         setIsProcessing(true);
         try {
-          await bulkRemoveCompanies(selectedCollectionId, companyIds);
-          clearSelection();
-          // TODO: Add success notification
+          const response = await bulkRemoveCompanies(selectedCollectionId, companyIds);
+          setCurrentOperation({
+            id: response.operation_id,
+            title: `Removing ${companyIds.length.toLocaleString()} companies from ${currentCollection?.collection_name}`
+          });
         } catch (error) {
           console.error('Error removing companies:', error);
-          // TODO: Add error notification
-        } finally {
+          setNotification({
+            open: true,
+            message: 'Failed to start bulk remove operation',
+            severity: 'error'
+          });
           setIsProcessing(false);
         }
       }
     });
   }, [selectedCollectionId, collectionResponse, clearSelection]);
+
+  const handleOperationComplete = useCallback(() => {
+    setCurrentOperation(null);
+    setIsProcessing(false);
+    clearSelection();
+    setNotification({
+      open: true,
+      message: 'Operation completed successfully!',
+      severity: 'success'
+    });
+    // Trigger a refresh of the table data
+    window.location.reload(); // Simple refresh for now
+  }, [clearSelection]);
 
   return (
     <>
@@ -174,6 +215,30 @@ function AppContent() {
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
       />
+      
+      <ProgressModal
+        open={currentOperation !== null}
+        operationId={currentOperation?.id || null}
+        title={currentOperation?.title || ''}
+        onClose={() => setCurrentOperation(null)}
+        onComplete={handleOperationComplete}
+        webSocketMessage={lastMessage}
+      />
+      
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setNotification(prev => ({ ...prev, open: false }))}
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </>
   );
 }
