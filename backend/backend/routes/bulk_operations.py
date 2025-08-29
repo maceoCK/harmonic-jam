@@ -89,21 +89,31 @@ async def process_bulk_add(operation_id: str, collection_id: UUID, company_ids: 
                     except Exception as e:
                         session.rollback()
                         operation['errors'].append(f"Error adding company {company_id}: {str(e)}")
+                    
+                    # Broadcast progress update after each company
+                    if operation['processed'] % 10 == 0 or operation['processed'] == operation['total']:
+                        await broadcast_progress(operation_id, {
+                            'operation_id': operation_id,
+                            'status': operation['status'],
+                            'total': operation['total'],
+                            'processed': operation['processed'],
+                            'percentage': (operation['processed'] / operation['total']) * 100 if operation['total'] > 0 else 0
+                        })
                 
-                # Broadcast progress update
-                await broadcast_progress(operation_id, {
-                    'operation_id': operation_id,
-                    'status': operation['status'],
-                    'total': operation['total'],
-                    'processed': operation['processed'],
-                    'percentage': (operation['processed'] / operation['total']) * 100
-                })
-                
-                # Update progress
-                await asyncio.sleep(0.01)  # Small delay to prevent overwhelming
+                # Small delay to prevent overwhelming
+                await asyncio.sleep(0.01)
             
             operation['status'] = 'completed'
             operation['completed_at'] = datetime.utcnow()
+            
+            # Send final progress update
+            await broadcast_progress(operation_id, {
+                'operation_id': operation_id,
+                'status': 'completed',
+                'total': operation['total'],
+                'processed': operation['processed'],
+                'percentage': 100
+            })
             
     except Exception as e:
         operation['status'] = 'failed'
@@ -131,20 +141,29 @@ async def process_bulk_remove(operation_id: str, collection_id: UUID, company_id
                 session.commit()
                 operation['processed'] += deleted
                 
-                # Broadcast progress update
+                # Broadcast progress update after each batch
                 await broadcast_progress(operation_id, {
                     'operation_id': operation_id,
                     'status': operation['status'],
                     'total': operation['total'],
                     'processed': operation['processed'],
-                    'percentage': (operation['processed'] / operation['total']) * 100
+                    'percentage': (operation['processed'] / operation['total']) * 100 if operation['total'] > 0 else 0
                 })
                 
-                # Update progress
+                # Small delay to prevent overwhelming
                 await asyncio.sleep(0.01)
             
             operation['status'] = 'completed'
             operation['completed_at'] = datetime.utcnow()
+            
+            # Send final progress update
+            await broadcast_progress(operation_id, {
+                'operation_id': operation_id,
+                'status': 'completed',
+                'total': operation['total'],
+                'processed': operation['processed'],
+                'percentage': 100
+            })
             
     except Exception as e:
         operation['status'] = 'failed'

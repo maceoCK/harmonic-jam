@@ -38,7 +38,9 @@ const ProgressModal: React.FC<ProgressModalProps> = ({
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('');
 
   useEffect(() => {
+    console.log('WebSocket message received:', webSocketMessage);
     if (webSocketMessage && webSocketMessage.operation_id === operationId) {
+      console.log('Processing message for operation:', operationId, webSocketMessage);
       const percentage = webSocketMessage.percentage || 0;
       setProgress(percentage);
       
