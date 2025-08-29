@@ -57,8 +57,8 @@ export const useWebSocket = (
         console.error('WebSocket error:', error);
       };
 
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
+      ws.onclose = (event) => {
+        console.log('WebSocket disconnected', event.code, event.reason);
         setReadyState(WebSocket.CLOSED);
         wsRef.current = null;
 

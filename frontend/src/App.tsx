@@ -91,10 +91,16 @@ function AppContent() {
         setConfirmDialog(prev => ({ ...prev, open: false }));
         setIsProcessing(true);
         try {
+          // Set the operation first to establish WebSocket connection
+          const operationTitle = `Adding ${companyIds.length.toLocaleString()} companies to ${targetCollection?.collection_name}`;
+          
+          // Start the bulk operation
           const response = await bulkAddCompanies(targetCollectionId, companyIds);
+          
+          // Set the operation state which will trigger WebSocket connection
           setCurrentOperation({
             id: response.operation_id,
-            title: `Adding ${companyIds.length.toLocaleString()} companies to ${targetCollection?.collection_name}`
+            title: operationTitle
           });
         } catch (error) {
           console.error('Error adding companies:', error);
@@ -125,10 +131,16 @@ function AppContent() {
         setConfirmDialog(prev => ({ ...prev, open: false }));
         setIsProcessing(true);
         try {
+          // Set the operation first to establish WebSocket connection
+          const operationTitle = `Removing ${companyIds.length.toLocaleString()} companies from ${currentCollection?.collection_name}`;
+          
+          // Start the bulk operation
           const response = await bulkRemoveCompanies(selectedCollectionId, companyIds);
+          
+          // Set the operation state which will trigger WebSocket connection
           setCurrentOperation({
             id: response.operation_id,
-            title: `Removing ${companyIds.length.toLocaleString()} companies from ${currentCollection?.collection_name}`
+            title: operationTitle
           });
         } catch (error) {
           console.error('Error removing companies:', error);
