@@ -17,6 +17,24 @@ export interface ICompanyBatchResponse {
     companies: ICompany[];
 }
 
+export interface IBulkOperationResponse {
+    operation_id: string;
+    status: string;
+    message: string;
+    total: number;
+    processed: number;
+}
+
+export interface IBulkOperationStatus {
+    operation_id: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'failed';
+    total: number;
+    processed: number;
+    errors: string[];
+    started_at: string;
+    completed_at?: string;
+}
+
 const BASE_URL = 'http://localhost:8000';
 
 export async function getCompanies(offset?: number, limit?: number): Promise<ICompanyBatchResponse> {
@@ -55,6 +73,50 @@ export async function getCollectionsMetadata(): Promise<ICollection[]> {
         return response.data;
     } catch (error) {
         console.error('Error fetching companies:', error);
+        throw error;
+    }
+}
+
+export async function bulkAddCompanies(collectionId: string, companyIds: number[]): Promise<IBulkOperationResponse> {
+    try {
+        const response = await axios.post(`${BASE_URL}/collections/${collectionId}/companies/bulk-add`, {
+            company_ids: companyIds,
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error adding companies to collection:', error);
+        throw error;
+    }
+}
+
+export async function bulkRemoveCompanies(collectionId: string, companyIds: number[]): Promise<IBulkOperationResponse> {
+    try {
+        const response = await axios.post(`${BASE_URL}/collections/${collectionId}/companies/bulk-remove`, {
+            company_ids: companyIds,
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error removing companies from collection:', error);
+        throw error;
+    }
+}
+
+export async function getAllCompanyIdsInCollection(collectionId: string): Promise<number[]> {
+    try {
+        const response = await axios.get(`${BASE_URL}/collections/${collectionId}/companies/ids`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching company IDs:', error);
+        throw error;
+    }
+}
+
+export async function getOperationStatus(operationId: string): Promise<IBulkOperationStatus> {
+    try {
+        const response = await axios.get(`${BASE_URL}/operations/${operationId}/status`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching operation status:', error);
         throw error;
     }
 }
