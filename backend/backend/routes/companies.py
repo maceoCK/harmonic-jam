@@ -116,6 +116,18 @@ class ConflictCheckResponse(BaseModel):
     total_checked: int
 
 
+class StatusCheckRequest(BaseModel):
+    company_ids: List[int]
+
+
+class StatusCheckResponse(BaseModel):
+    liked_count: int
+    ignored_count: int
+    no_status_count: int
+    liked_ids: List[int]
+    ignored_ids: List[int]
+
+
 @router.post("/check-conflicts", response_model=ConflictCheckResponse)
 def check_conflicts(
     request: ConflictCheckRequest,
@@ -203,6 +215,61 @@ def check_conflicts(
         duplicates=duplicates,
         safe_to_add=safe_to_add,
         total_checked=len(request.company_ids)
+    )
+
+
+@router.post("/check-statuses", response_model=StatusCheckResponse)
+def check_statuses(
+    request: StatusCheckRequest,
+    db: Session = Depends(database.get_db),
+):
+    """Check which companies have liked/ignored statuses"""
+    # Get special collections
+    liked_collection = (
+        db.query(database.CompanyCollection)
+        .filter(database.CompanyCollection.collection_name == "Liked Companies List")
+        .first()
+    )
+    
+    ignore_collection = (
+        db.query(database.CompanyCollection)
+        .filter(database.CompanyCollection.collection_name == "Companies to Ignore List")
+        .first()
+    )
+    
+    liked_ids = []
+    ignored_ids = []
+    
+    if liked_collection:
+        liked_associations = (
+            db.query(database.CompanyCollectionAssociation.company_id)
+            .filter(
+                database.CompanyCollectionAssociation.company_id.in_(request.company_ids),
+                database.CompanyCollectionAssociation.collection_id == liked_collection.id
+            )
+            .all()
+        )
+        liked_ids = [a.company_id for a in liked_associations]
+    
+    if ignore_collection:
+        ignored_associations = (
+            db.query(database.CompanyCollectionAssociation.company_id)
+            .filter(
+                database.CompanyCollectionAssociation.company_id.in_(request.company_ids),
+                database.CompanyCollectionAssociation.collection_id == ignore_collection.id
+            )
+            .all()
+        )
+        ignored_ids = [a.company_id for a in ignored_associations]
+    
+    no_status_count = len(request.company_ids) - len(liked_ids) - len(ignored_ids)
+    
+    return StatusCheckResponse(
+        liked_count=len(liked_ids),
+        ignored_count=len(ignored_ids),
+        no_status_count=no_status_count,
+        liked_ids=liked_ids,
+        ignored_ids=ignored_ids
     )
 
 
