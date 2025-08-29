@@ -48,6 +48,10 @@ class BulkOperationStatus(BaseModel):
 async def process_bulk_add(operation_id: str, collection_id: UUID, company_ids: List[int], batch_size: int = 100):
     """Process bulk add operation in batches to handle throttling"""
     operation = ongoing_operations[operation_id]
+    
+    # Small delay to allow WebSocket connection to establish
+    await asyncio.sleep(0.1)
+    
     operation['status'] = 'in_progress'
     
     try:
@@ -123,6 +127,10 @@ async def process_bulk_add(operation_id: str, collection_id: UUID, company_ids: 
 async def process_bulk_remove(operation_id: str, collection_id: UUID, company_ids: List[int], batch_size: int = 100):
     """Process bulk remove operation in batches"""
     operation = ongoing_operations[operation_id]
+    
+    # Small delay to allow WebSocket connection to establish
+    await asyncio.sleep(0.1)
+    
     operation['status'] = 'in_progress'
     
     try:
