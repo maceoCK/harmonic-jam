@@ -36,13 +36,15 @@ const ProgressModal: React.FC<ProgressModalProps> = ({
   const [status, setStatus] = useState<IBulkOperationStatus | null>(null);
   const [progress, setProgress] = useState(0);
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('');
+  const [processedCount, setProcessedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
-    console.log('WebSocket message received:', webSocketMessage);
     if (webSocketMessage && webSocketMessage.operation_id === operationId) {
-      console.log('Processing message for operation:', operationId, webSocketMessage);
       const percentage = webSocketMessage.percentage || 0;
       setProgress(percentage);
+      setProcessedCount(webSocketMessage.processed || 0);
+      setTotalCount(webSocketMessage.total || 0);
       
       // Calculate estimated time remaining
       if (webSocketMessage.processed > 0 && webSocketMessage.total > 0) {
@@ -139,7 +141,7 @@ const ProgressModal: React.FC<ProgressModalProps> = ({
           
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="body2">
-              {webSocketMessage?.processed || 0} of {webSocketMessage?.total || 0} processed
+              {processedCount} of {totalCount} processed
             </Typography>
             {estimatedTimeRemaining && progress < 100 && (
               <Chip

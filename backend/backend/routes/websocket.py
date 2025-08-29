@@ -25,15 +25,12 @@ class ConnectionManager:
                 del self.active_connections[operation_id]
     
     async def send_progress(self, operation_id: str, data: dict):
-        print(f"Active connections for {operation_id}: {len(self.active_connections.get(operation_id, []))}")
         if operation_id in self.active_connections:
             disconnected = set()
             for connection in self.active_connections[operation_id]:
                 try:
                     await connection.send_json(data)
-                    print(f"Sent message to WebSocket client: {data}")
                 except Exception as e:
-                    print(f"Failed to send to WebSocket: {e}")
                     disconnected.add(connection)
             
             # Clean up disconnected connections
@@ -58,5 +55,4 @@ async def websocket_endpoint(websocket: WebSocket, operation_id: str):
 
 async def broadcast_progress(operation_id: str, progress_data: dict):
     """Broadcast progress updates to all connected clients"""
-    print(f"Broadcasting progress for {operation_id}: {progress_data}")
     await manager.send_progress(operation_id, progress_data)
