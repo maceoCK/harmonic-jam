@@ -4,6 +4,7 @@ export interface ICompany {
     id: number;
     company_name: string;
     liked: boolean;
+    ignored?: boolean;
     industry?: string;
     description?: string;
 }

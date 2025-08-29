@@ -1,8 +1,7 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   DataGrid,
   GridColDef,
-  GridRowSelectionModel,
   GridRenderCellParams,
   GridRowParams,
 } from '@mui/x-data-grid';
@@ -24,6 +23,7 @@ import {
   getCollectionsById, 
   getAllCompanyIdsInCollection, 
   ICompany,
+  ICollection,
   bulkAddCompanies,
   bulkRemoveCompanies,
 } from '../utils/jam-api';
@@ -31,10 +31,12 @@ import { useSelection } from '../contexts/SelectionContext';
 
 interface EnhancedCompanyTableProps {
   selectedCollectionId: string;
+  collections: ICollection[];
 }
 
 const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   selectedCollectionId,
+  collections,
 }) => {
   const [response, setResponse] = useState<ICompany[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -42,6 +44,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(false);
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+  const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
 
   const {
     selectedCompanyIds,
@@ -53,13 +56,52 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   } = useSelection();
 
   // Determine which collection we're viewing
+  const currentCollection = useMemo(() => {
+    return collections?.find(c => c.id === selectedCollectionId);
+  }, [collections, selectedCollectionId]);
+  
   const isLikedCollection = useMemo(() => {
-    return selectedCollectionId === 'c6856b00-2986-41c7-ba57-3cbdb2d44fc2'; // Liked Companies List ID
-  }, [selectedCollectionId]);
+    return currentCollection?.collection_name === 'Liked Companies List';
+  }, [currentCollection]);
 
   const isIgnoreCollection = useMemo(() => {
-    return selectedCollectionId === '42c24a84-2cb1-4585-a3cf-1e42a4b3803c'; // Companies to Ignore List ID
-  }, [selectedCollectionId]);
+    return currentCollection?.collection_name === 'Companies to Ignore List';
+  }, [currentCollection]);
+
+  const isMyList = useMemo(() => {
+    return currentCollection?.collection_name === 'My List';
+  }, [currentCollection]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl/Cmd + A: Select all
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        handleSelectAll();
+      }
+      // Delete: Remove selected items (if in a collection)
+      else if (e.key === 'Delete' && selectedCompanyIds.size > 0) {
+        e.preventDefault();
+        // Trigger remove action through parent
+        if (window.confirm(`Remove ${selectedCompanyIds.size} selected items?`)) {
+          // Call the bulk remove through the parent component
+          const ids = Array.from(selectedCompanyIds);
+          bulkRemoveCompanies(selectedCollectionId, ids).then(() => {
+            window.location.reload();
+          });
+        }
+      }
+      // Escape: Clear selection
+      else if (e.key === 'Escape') {
+        e.preventDefault();
+        clearSelection();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedCompanyIds, selectedCollectionId, clearSelection]);
 
   useEffect(() => {
     setLoading(true);
@@ -78,29 +120,43 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     clearSelection();
   }, [selectedCollectionId, clearSelection]);
 
-  const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
-    const currentPageIds = response.map(company => company.id);
-    currentPageIds.forEach(id => {
-      if (selectedCompanyIds.has(id) && !newSelection.includes(id)) {
-        toggleSelection(id);
-      }
-    });
-    
-    newSelection.forEach(id => {
-      if (!selectedCompanyIds.has(Number(id))) {
-        toggleSelection(Number(id));
-      }
-    });
-  }, [response, selectedCompanyIds, toggleSelection]);
+  // Custom row styling for selection
+  const getRowClassName = (params: GridRowParams) => {
+    return selectedCompanyIds.has(params.row.id) ? 'row-selected' : '';
+  };
 
   const handleStatusToggle = async (companyId: number, currentStatus: 'liked' | 'ignored' | 'none') => {
     console.log(`Toggle status for company ${companyId} from ${currentStatus}`);
     
-    // Get collection IDs (these are hardcoded based on your seed data)
-    const likedCollectionId = 'c6856b00-2986-41c7-ba57-3cbdb2d44fc2';
-    const ignoreCollectionId = '42c24a84-2cb1-4585-a3cf-1e42a4b3803c';
+    // Get collection IDs dynamically from collections prop
+    const likedCollection = collections?.find(c => c.collection_name === 'Liked Companies List');
+    const ignoreCollection = collections?.find(c => c.collection_name === 'Companies to Ignore List');
+    const likedCollectionId = likedCollection?.id;
+    const ignoreCollectionId = ignoreCollection?.id;
     
-    setLoading(true);
+    if (!likedCollectionId || !ignoreCollectionId) {
+      console.error('Could not find liked or ignore collection IDs');
+      return;
+    }
+    
+    // Optimistically update UI first for immediate feedback
+    const updatedCompanies = response.map(company => {
+      if (company.id === companyId) {
+        if (currentStatus === 'none') {
+          // Cycle to liked
+          return { ...company, liked: true, ignored: false };
+        } else if (currentStatus === 'liked') {
+          // Cycle to ignored
+          return { ...company, liked: false, ignored: true };
+        } else {
+          // Cycle back to none
+          return { ...company, liked: false, ignored: false };
+        }
+      }
+      return company;
+    });
+    setResponse(updatedCompanies);
+    
     try {
       if (currentStatus === 'none') {
         // Add to liked
@@ -113,15 +169,14 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
         // Remove from ignored (back to none)
         await bulkRemoveCompanies(ignoreCollectionId, [companyId]);
       }
-      
-      // Refresh the current page data
+    } catch (error) {
+      console.error('Error toggling status:', error);
+      // Revert on error
+      setLoading(true);
       const newResponse = await getCollectionsById(selectedCollectionId, offset, pageSize);
       setResponse(newResponse.companies);
       setTotal(newResponse.total);
       setTotalInCollection(newResponse.total);
-    } catch (error) {
-      console.error('Error toggling status:', error);
-    } finally {
       setLoading(false);
     }
   };
@@ -136,8 +191,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => {
         const isLiked = params.row.liked;
-        // TODO: Add ignored status when backend supports it
-        const isIgnored = false; // params.row.ignored;
+        const isIgnored = params.row.ignored || false;
 
         let currentStatus: 'liked' | 'ignored' | 'none' = 'none';
         if (isLiked) currentStatus = 'liked';
@@ -226,10 +280,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     },
   ];
 
-  // Get the selected IDs for the current page
-  const currentPageSelectedIds = Array.from(selectedCompanyIds).filter(id =>
-    response.some(company => company.id === id)
-  );
+  // Not using DataGrid selection due to multi-select limitation in free version
 
   const handleSelectAll = useCallback(async () => {
     if (isAllSelected) {
@@ -306,11 +357,9 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           pagination
           loading={loading}
           checkboxSelection={false}
-          disableRowSelectionOnClick={false}
-          keepNonExistentRowsSelected
-          rowSelectionModel={currentPageSelectedIds}
-          onRowSelectionModelChange={handleSelectionChange}
+          disableRowSelectionOnClick={true}
           paginationMode="server"
+          getRowClassName={getRowClassName}
           onPaginationModelChange={(newMeta) => {
             setPageSize(newMeta.pageSize);
             setOffset(newMeta.page * newMeta.pageSize);
@@ -319,8 +368,33 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
             // Don't toggle selection if clicking on the status button
             const target = event.target as HTMLElement;
             if (!target.closest('button')) {
-              // Toggle selection on row click
-              toggleSelection(params.row.id);
+              const clickedId = params.row.id;
+              
+              if (event.shiftKey && lastSelectedId !== null) {
+                // Shift-click: select range
+                const currentPageIds = response.map(c => c.id);
+                const startIdx = currentPageIds.indexOf(lastSelectedId);
+                const endIdx = currentPageIds.indexOf(clickedId);
+                
+                if (startIdx !== -1 && endIdx !== -1) {
+                  const [minIdx, maxIdx] = [Math.min(startIdx, endIdx), Math.max(startIdx, endIdx)];
+                  for (let i = minIdx; i <= maxIdx; i++) {
+                    const id = currentPageIds[i];
+                    if (!selectedCompanyIds.has(id)) {
+                      toggleSelection(id);
+                    }
+                  }
+                }
+              } else if (event.ctrlKey || event.metaKey) {
+                // Ctrl/Cmd-click: toggle single selection
+                toggleSelection(clickedId);
+              } else {
+                // Regular click: clear others and select this one
+                clearSelection();
+                toggleSelection(clickedId);
+              }
+              
+              setLastSelectedId(clickedId);
             }
           }}
           slotProps={{
@@ -336,19 +410,22 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           }}
           sx={{
             border: 'none',
+            userSelect: 'none', // Prevent text selection
             '& .MuiDataGrid-row': {
               cursor: 'pointer',
+              userSelect: 'none', // Prevent text selection in rows
               '&:hover': {
                 bgcolor: 'rgba(26, 115, 232, 0.04)',
               },
-              '&.Mui-selected': {
-                bgcolor: 'rgba(26, 115, 232, 0.08)',
+              '&.row-selected': {
+                bgcolor: 'rgba(26, 115, 232, 0.08) !important',
                 '&:hover': {
-                  bgcolor: 'rgba(26, 115, 232, 0.12)',
+                  bgcolor: 'rgba(26, 115, 232, 0.12) !important',
                 },
               },
             },
             '& .MuiDataGrid-cell': {
+              userSelect: 'none', // Prevent text selection in cells
               borderBottom: '1px solid #f0f0f0',
             },
             '& .MuiDataGrid-columnHeaders': {

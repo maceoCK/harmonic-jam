@@ -472,6 +472,7 @@ function AppContent() {
             <Box sx={{ flex: 1, p: 2, overflow: 'hidden' }}>
               <EnhancedCompanyTable 
                 selectedCollectionId={selectedCollectionId}
+                collections={collectionResponse}
               />
             </Box>
           </>

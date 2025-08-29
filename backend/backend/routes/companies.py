@@ -16,6 +16,7 @@ class CompanyOutput(BaseModel):
     id: int
     company_name: str
     liked: bool
+    ignored: bool = False
 
 
 class CompanyBatchOutput(BaseModel):
@@ -31,6 +32,12 @@ def fetch_companies_with_liked(
         .filter(database.CompanyCollection.collection_name == "Liked Companies List")
         .first()
     )
+    
+    ignored_list = (
+        db.query(database.CompanyCollection)
+        .filter(database.CompanyCollection.collection_name == "Companies to Ignore List")
+        .first()
+    )
 
     liked_associations = (
         db.query(database.CompanyCollectionAssociation)
@@ -39,24 +46,36 @@ def fetch_companies_with_liked(
             database.CompanyCollectionAssociation.collection_id == liked_list.id,
         )
         .all()
-    )
+    ) if liked_list else []
+    
+    ignored_associations = (
+        db.query(database.CompanyCollectionAssociation)
+        .filter(database.CompanyCollectionAssociation.company_id.in_(company_ids))
+        .filter(
+            database.CompanyCollectionAssociation.collection_id == ignored_list.id,
+        )
+        .all()
+    ) if ignored_list else []
 
     liked_companies = {association.company_id for association in liked_associations}
+    ignored_companies = {association.company_id for association in ignored_associations}
 
     companies = (
         db.query(database.Company).filter(database.Company.id.in_(company_ids)).all()
     )
 
-    results = [(company, company.id in liked_companies) for company in companies]
-
-    return [
-        CompanyOutput(
-            id=company.id,
-            company_name=company.company_name,
-            liked=True if liked else False,
+    results = []
+    for company in companies:
+        results.append(
+            CompanyOutput(
+                id=company.id,
+                company_name=company.company_name,
+                liked=company.id in liked_companies,
+                ignored=company.id in ignored_companies,
+            )
         )
-        for company, liked in results
-    ]
+
+    return results
 
 
 @router.get("", response_model=CompanyBatchOutput)
