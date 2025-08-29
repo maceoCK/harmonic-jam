@@ -5,15 +5,15 @@ from uuid import UUID
 import asyncio
 import time
 from datetime import datetime
-from sqlalchemy import select, and_, delete
+from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.dialects.postgresql import insert
 
 from backend.db.database import (
-    AsyncSessionLocal,
+    SessionLocal,
     CompanyCollectionAssociation,
     CompanyCollection,
-    Company
+    Company,
+    get_db
 )
 from backend.routes.websocket import broadcast_progress
 
@@ -51,12 +51,9 @@ async def process_bulk_add(operation_id: str, collection_id: UUID, company_ids: 
     operation['status'] = 'in_progress'
     
     try:
-        async with AsyncSessionLocal() as session:
+        with SessionLocal() as session:
             # Verify collection exists
-            collection_result = await session.execute(
-                select(CompanyCollection).where(CompanyCollection.id == collection_id)
-            )
-            collection = collection_result.scalar_one_or_none()
+            collection = session.query(CompanyCollection).filter(CompanyCollection.id == collection_id).first()
             if not collection:
                 operation['status'] = 'failed'
                 operation['errors'].append(f"Collection {collection_id} not found")
@@ -67,10 +64,8 @@ async def process_bulk_add(operation_id: str, collection_id: UUID, company_ids: 
                 batch = company_ids[i:i+batch_size]
                 
                 # Verify companies exist
-                company_result = await session.execute(
-                    select(Company.id).where(Company.id.in_(batch))
-                )
-                valid_company_ids = [row[0] for row in company_result]
+                valid_company_ids = session.query(Company.id).filter(Company.id.in_(batch)).all()
+                valid_company_ids = [row[0] for row in valid_company_ids]
                 
                 if len(valid_company_ids) != len(batch):
                     invalid_ids = set(batch) - set(valid_company_ids)
@@ -84,15 +79,15 @@ async def process_bulk_add(operation_id: str, collection_id: UUID, company_ids: 
                             collection_id=collection_id
                         )
                         session.add(association)
-                        await session.commit()
+                        session.commit()
                         operation['processed'] += 1
                     except IntegrityError:
                         # Duplicate - skip
-                        await session.rollback()
+                        session.rollback()
                         operation['processed'] += 1
                         continue
                     except Exception as e:
-                        await session.rollback()
+                        session.rollback()
                         operation['errors'].append(f"Error adding company {company_id}: {str(e)}")
                 
                 # Broadcast progress update
@@ -121,22 +116,20 @@ async def process_bulk_remove(operation_id: str, collection_id: UUID, company_id
     operation['status'] = 'in_progress'
     
     try:
-        async with AsyncSessionLocal() as session:
+        with SessionLocal() as session:
             # Process in batches
             for i in range(0, len(company_ids), batch_size):
                 batch = company_ids[i:i+batch_size]
                 
                 # Delete associations
-                result = await session.execute(
-                    delete(CompanyCollectionAssociation).where(
-                        and_(
-                            CompanyCollectionAssociation.collection_id == collection_id,
-                            CompanyCollectionAssociation.company_id.in_(batch)
-                        )
+                deleted = session.query(CompanyCollectionAssociation).filter(
+                    and_(
+                        CompanyCollectionAssociation.collection_id == collection_id,
+                        CompanyCollectionAssociation.company_id.in_(batch)
                     )
-                )
-                await session.commit()
-                operation['processed'] += result.rowcount
+                ).delete(synchronize_session=False)
+                session.commit()
+                operation['processed'] += deleted
                 
                 # Broadcast progress update
                 await broadcast_progress(operation_id, {
@@ -231,23 +224,19 @@ async def bulk_remove_companies(
     )
 
 @router.get("/collections/{collection_id}/companies/ids")
-async def get_all_company_ids(collection_id: UUID) -> List[int]:
+def get_all_company_ids(collection_id: UUID) -> List[int]:
     """Get all company IDs in a collection (for select all functionality)"""
-    async with AsyncSessionLocal() as session:
+    with SessionLocal() as session:
         # Verify collection exists
-        collection_result = await session.execute(
-            select(CompanyCollection).where(CompanyCollection.id == collection_id)
-        )
-        collection = collection_result.scalar_one_or_none()
+        collection = session.query(CompanyCollection).filter(CompanyCollection.id == collection_id).first()
         if not collection:
             raise HTTPException(status_code=404, detail="Collection not found")
         
         # Get all company IDs
-        result = await session.execute(
-            select(CompanyCollectionAssociation.company_id)
-            .where(CompanyCollectionAssociation.collection_id == collection_id)
-            .order_by(CompanyCollectionAssociation.company_id)
-        )
+        result = session.query(CompanyCollectionAssociation.company_id)\
+            .filter(CompanyCollectionAssociation.collection_id == collection_id)\
+            .order_by(CompanyCollectionAssociation.company_id)\
+            .all()
         
         return [row[0] for row in result]
 
