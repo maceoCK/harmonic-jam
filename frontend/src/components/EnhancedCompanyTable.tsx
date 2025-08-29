@@ -13,29 +13,28 @@ import {
   Chip,
   Typography,
   Button,
-  ToggleButton,
   Fade,
 } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import BlockIcon from '@mui/icons-material/Block';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
-import CheckBoxIcon from '@mui/icons-material/CheckBox';
-import ViewListIcon from '@mui/icons-material/ViewList';
-import { getCollectionsById, getAllCompanyIdsInCollection, ICompany } from '../utils/jam-api';
+import { 
+  getCollectionsById, 
+  getAllCompanyIdsInCollection, 
+  ICompany,
+  bulkAddCompanies,
+  bulkRemoveCompanies,
+} from '../utils/jam-api';
 import { useSelection } from '../contexts/SelectionContext';
 
 interface EnhancedCompanyTableProps {
   selectedCollectionId: string;
-  selectionMode: boolean;
-  onSelectionModeChange: (mode: boolean) => void;
 }
 
 const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   selectedCollectionId,
-  selectionMode,
-  onSelectionModeChange,
 }) => {
   const [response, setResponse] = useState<ICompany[]>([]);
   const [total, setTotal] = useState<number>(0);
@@ -77,8 +76,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   useEffect(() => {
     setOffset(0);
     clearSelection();
-    onSelectionModeChange(false); // Exit selection mode when switching collections
-  }, [selectedCollectionId, clearSelection, onSelectionModeChange]);
+  }, [selectedCollectionId, clearSelection]);
 
   const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     const currentPageIds = response.map(company => company.id);
@@ -95,38 +93,84 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     });
   }, [response, selectedCompanyIds, toggleSelection]);
 
+  const handleStatusToggle = async (companyId: number, currentStatus: 'liked' | 'ignored' | 'none') => {
+    console.log(`Toggle status for company ${companyId} from ${currentStatus}`);
+    
+    // Get collection IDs (these are hardcoded based on your seed data)
+    const likedCollectionId = 'c6856b00-2986-41c7-ba57-3cbdb2d44fc2';
+    const ignoreCollectionId = '42c24a84-2cb1-4585-a3cf-1e42a4b3803c';
+    
+    setLoading(true);
+    try {
+      if (currentStatus === 'none') {
+        // Add to liked
+        await bulkAddCompanies(likedCollectionId, [companyId]);
+      } else if (currentStatus === 'liked') {
+        // Remove from liked, add to ignored
+        await bulkRemoveCompanies(likedCollectionId, [companyId]);
+        await bulkAddCompanies(ignoreCollectionId, [companyId]);
+      } else if (currentStatus === 'ignored') {
+        // Remove from ignored (back to none)
+        await bulkRemoveCompanies(ignoreCollectionId, [companyId]);
+      }
+      
+      // Refresh the current page data
+      const newResponse = await getCollectionsById(selectedCollectionId, offset, pageSize);
+      setResponse(newResponse.companies);
+      setTotal(newResponse.total);
+      setTotalInCollection(newResponse.total);
+    } catch (error) {
+      console.error('Error toggling status:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Column definitions with enhanced visual design
   const columns: GridColDef[] = [
     {
       field: 'status',
-      headerName: '',
-      width: 50,
+      headerName: 'Status',
+      width: 80,
       sortable: false,
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => {
-        // Don't show status icons in their respective collections (redundant)
-        if (isLikedCollection || isIgnoreCollection) {
-          return null;
-        }
-
-        if (params.row.liked) {
-          return (
-            <Tooltip title="Liked company">
-              <FavoriteIcon sx={{ color: '#ea4335', fontSize: 20 }} />
-            </Tooltip>
-          );
-        }
-        
+        const isLiked = params.row.liked;
         // TODO: Add ignored status when backend supports it
-        // if (params.row.ignored) {
-        //   return (
-        //     <Tooltip title="Ignored company">
-        //       <BlockIcon sx={{ color: '#5f6368', fontSize: 20 }} />
-        //     </Tooltip>
-        //   );
-        // }
+        const isIgnored = false; // params.row.ignored;
 
-        return null;
+        let currentStatus: 'liked' | 'ignored' | 'none' = 'none';
+        if (isLiked) currentStatus = 'liked';
+        else if (isIgnored) currentStatus = 'ignored';
+
+        return (
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStatusToggle(params.row.id, currentStatus);
+            }}
+            sx={{
+              '&:hover': {
+                bgcolor: 'rgba(0, 0, 0, 0.04)',
+              },
+            }}
+          >
+            {isLiked ? (
+              <Tooltip title="Liked - Click to ignore">
+                <FavoriteIcon sx={{ color: '#ea4335', fontSize: 20 }} />
+              </Tooltip>
+            ) : isIgnored ? (
+              <Tooltip title="Ignored - Click to clear">
+                <VisibilityOffIcon sx={{ color: '#5f6368', fontSize: 20 }} />
+              </Tooltip>
+            ) : (
+              <Tooltip title="Click to like">
+                <FavoriteBorderIcon sx={{ color: '#9aa0a6', fontSize: 20 }} />
+              </Tooltip>
+            )}
+          </IconButton>
+        );
       },
     },
     {
@@ -156,12 +200,10 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     {
       field: 'actions',
       headerName: '',
-      width: 60,
+      width: 50,
       sortable: false,
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => {
-        if (selectionMode) return null;
-        
         return (
           <Fade in={hoveredRow === params.row.id}>
             <IconButton
@@ -189,53 +231,66 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     response.some(company => company.id === id)
   );
 
+  const handleSelectAll = useCallback(async () => {
+    if (isAllSelected) {
+      clearSelection();
+    } else {
+      setLoading(true);
+      try {
+        const allIds = await getAllCompanyIdsInCollection(selectedCollectionId);
+        selectAll(allIds);
+      } catch (error) {
+        console.error('Error selecting all:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [isAllSelected, clearSelection, selectAll, selectedCollectionId]);
+
   return (
-    <Box sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Selection Mode Toggle */}
-      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <ToggleButton
-          value="select"
-          selected={selectionMode}
-          onChange={() => {
-            onSelectionModeChange(!selectionMode);
-            if (selectionMode) {
-              clearSelection();
-            }
-          }}
+    <Box sx={{ height: 'calc(100vh - 250px)', width: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Selection controls */}
+      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          {selectedCompanyIds.size > 0 && (
+            <Chip
+              label={`${selectedCompanyIds.size} selected`}
+              size="small"
+              onDelete={clearSelection}
+              sx={{
+                bgcolor: '#1a73e8',
+                color: 'white',
+                fontWeight: 500,
+                '& .MuiChip-deleteIcon': {
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  '&:hover': {
+                    color: 'white',
+                  },
+                },
+              }}
+            />
+          )}
+        </Box>
+        <Button
+          variant="text"
           size="small"
+          onClick={handleSelectAll}
+          disabled={loading || total === 0}
           sx={{
             textTransform: 'none',
-            px: 2,
-            borderColor: '#dadce0',
-            '&.Mui-selected': {
-              bgcolor: '#e8f0fe',
-              borderColor: '#1a73e8',
-              color: '#1a73e8',
-              '&:hover': {
-                bgcolor: '#e8f0fe',
-              },
+            color: '#1a73e8',
+            fontSize: '0.875rem',
+            '&:hover': {
+              bgcolor: 'rgba(26, 115, 232, 0.08)',
             },
           }}
         >
-          {selectionMode ? <CheckBoxIcon sx={{ mr: 1 }} fontSize="small" /> : <CheckBoxOutlineBlankIcon sx={{ mr: 1 }} fontSize="small" />}
-          {selectionMode ? 'Exit Selection' : 'Select Items'}
-        </ToggleButton>
-
-        {selectionMode && selectedCompanyIds.size > 0 && (
-          <Chip
-            label={`${selectedCompanyIds.size} selected`}
-            size="small"
-            sx={{
-              bgcolor: '#1a73e8',
-              color: 'white',
-              fontWeight: 500,
-            }}
-          />
-        )}
+          {isAllSelected ? 'Deselect All' : `Select All (${total.toLocaleString()})`}
+        </Button>
       </Box>
 
       {/* Data Table */}
-      <Box sx={{ flex: 1, width: '100%' }}>
+      <Box sx={{ flex: 1, width: '100%', overflow: 'hidden' }}>
         <DataGrid
           rows={response}
           columns={columns}
@@ -250,8 +305,8 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           rowCount={total}
           pagination
           loading={loading}
-          checkboxSelection={selectionMode}
-          disableRowSelectionOnClick
+          checkboxSelection={false}
+          disableRowSelectionOnClick={false}
           keepNonExistentRowsSelected
           rowSelectionModel={currentPageSelectedIds}
           onRowSelectionModelChange={handleSelectionChange}
@@ -260,14 +315,12 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
             setPageSize(newMeta.pageSize);
             setOffset(newMeta.page * newMeta.pageSize);
           }}
-          onRowClick={(params) => {
-            if (selectionMode) {
-              // Toggle selection on row click in selection mode
-              if (selectedCompanyIds.has(params.row.id)) {
-                toggleSelection(params.row.id);
-              } else {
-                toggleSelection(params.row.id);
-              }
+          onRowClick={(params, event) => {
+            // Don't toggle selection if clicking on the status button
+            const target = event.target as HTMLElement;
+            if (!target.closest('button')) {
+              // Toggle selection on row click
+              toggleSelection(params.row.id);
             }
           }}
           slotProps={{
@@ -284,7 +337,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           sx={{
             border: 'none',
             '& .MuiDataGrid-row': {
-              cursor: selectionMode ? 'pointer' : 'default',
+              cursor: 'pointer',
               '&:hover': {
                 bgcolor: 'rgba(26, 115, 232, 0.04)',
               },

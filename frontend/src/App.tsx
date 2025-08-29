@@ -163,7 +163,6 @@ const lightTheme = createTheme({
 
 function AppContent() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
-  const [selectionMode, setSelectionMode] = useState(false);
   const { data: collectionResponse } = useApi(() => getCollectionsMetadata());
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -199,7 +198,7 @@ function AppContent() {
     companyIds: [],
   });
   
-  const { selectAll, clearSelection, getSelectedIds } = useSelection();
+  const { selectAll, clearSelection, getSelectedIds, selectedCompanyIds } = useSelection();
   
   // WebSocket connection for progress updates
   const wsUrl = currentOperation 
@@ -455,8 +454,8 @@ function AppContent() {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff' }}>
         {selectedCollectionId && collectionResponse && (
           <>
-            {/* Action Bar - Only show in selection mode */}
-            {selectionMode && (
+            {/* Action Bar - Only show container when items selected */}
+            {selectedCompanyIds.size > 0 && (
               <Box sx={{ p: 2, borderBottom: '1px solid #e8eaed' }}>
                 <BulkActionBar
                   collections={collectionResponse}
@@ -470,11 +469,9 @@ function AppContent() {
             )}
             
             {/* Table */}
-            <Box sx={{ flex: 1, p: 2 }}>
+            <Box sx={{ flex: 1, p: 2, overflow: 'hidden' }}>
               <EnhancedCompanyTable 
                 selectedCollectionId={selectedCollectionId}
-                selectionMode={selectionMode}
-                onSelectionModeChange={setSelectionMode}
               />
             </Box>
           </>

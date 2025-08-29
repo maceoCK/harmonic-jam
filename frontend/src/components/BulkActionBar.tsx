@@ -71,38 +71,7 @@ const BulkActionBar: React.FC<BulkActionBarProps> = ({
   const currentCollection = collections.find(c => c.id === currentCollectionId);
 
   if (selectedCount === 0) {
-    return (
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          height: 48,
-        }}
-      >
-        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
-          Select companies to perform bulk actions
-        </Typography>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<SelectAllIcon />}
-          onClick={onSelectAll}
-          disabled={isLoading || totalInCollection === 0}
-          sx={{
-            textTransform: 'none',
-            borderColor: '#dadce0',
-            color: '#5f6368',
-            '&:hover': {
-              backgroundColor: 'rgba(26, 115, 232, 0.04)',
-              borderColor: '#dadce0',
-            },
-          }}
-        >
-          Select All ({totalInCollection.toLocaleString()})
-        </Button>
-      </Box>
-    );
+    return null; // Don't show anything when no items selected
   }
 
   return (
