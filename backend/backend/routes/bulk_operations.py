@@ -95,14 +95,13 @@ async def process_bulk_add(operation_id: str, collection_id: UUID, company_ids: 
                         operation['errors'].append(f"Error adding company {company_id}: {str(e)}")
                     
                     # Broadcast progress update after each company
-                    if operation['processed'] % 10 == 0 or operation['processed'] == operation['total']:
-                        await broadcast_progress(operation_id, {
-                            'operation_id': operation_id,
-                            'status': operation['status'],
-                            'total': operation['total'],
-                            'processed': operation['processed'],
-                            'percentage': (operation['processed'] / operation['total']) * 100 if operation['total'] > 0 else 0
-                        })
+                    await broadcast_progress(operation_id, {
+                        'operation_id': operation_id,
+                        'status': operation['status'],
+                        'total': operation['total'],
+                        'processed': operation['processed'],
+                        'percentage': (operation['processed'] / operation['total']) * 100 if operation['total'] > 0 else 0
+                    })
                 
                 # Small delay to prevent overwhelming
                 await asyncio.sleep(0.01)
