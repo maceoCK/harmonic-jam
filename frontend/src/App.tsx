@@ -5,14 +5,18 @@ import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { Snackbar, Alert, Box, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Chip, Container } from "@mui/material";
 import { useEffect, useState, useCallback } from "react";
 import CompanyTable from "./components/CompanyTable";
+import EnhancedCompanyTable from "./components/EnhancedCompanyTable";
 import BulkActionBar from "./components/BulkActionBar";
 import ConfirmationDialog from "./components/ConfirmationDialog";
+import ConflictResolutionDialog, { ConflictInfo } from "./components/ConflictResolutionDialog";
 import ProgressModal from "./components/ProgressModal";
 import { 
   getCollectionsMetadata, 
   bulkAddCompanies, 
   bulkRemoveCompanies,
   getAllCompanyIdsInCollection,
+  checkConflicts,
+  IConflictCheckResponse,
 } from "./utils/jam-api";
 import useApi from "./utils/useApi";
 import useWebSocket from "./hooks/useWebSocket";
@@ -159,6 +163,7 @@ const lightTheme = createTheme({
 
 function AppContent() {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>();
+  const [selectionMode, setSelectionMode] = useState(false);
   const { data: collectionResponse } = useApi(() => getCollectionsMetadata());
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
@@ -179,6 +184,20 @@ function AppContent() {
     message: string;
     severity: 'success' | 'error' | 'info' | 'warning';
   }>({ open: false, message: '', severity: 'info' });
+  
+  const [conflictDialog, setConflictDialog] = useState<{
+    open: boolean;
+    conflictInfo: ConflictInfo | null;
+    targetCollectionId: string;
+    targetCollectionName: string;
+    companyIds: number[];
+  }>({
+    open: false,
+    conflictInfo: null,
+    targetCollectionId: '',
+    targetCollectionName: '',
+    companyIds: [],
+  });
   
   const { selectAll, clearSelection, getSelectedIds } = useSelection();
   
@@ -211,61 +230,84 @@ function AppContent() {
     }
   }, [selectedCollectionId, selectAll]);
 
-  const handleBulkAdd = useCallback((targetCollectionId: string, companyIds: number[]) => {
+  const handleBulkAdd = useCallback(async (targetCollectionId: string, companyIds: number[]) => {
     const targetCollection = collectionResponse?.find(c => c.id === targetCollectionId);
-    const estimatedTime = companyIds.length > 100 
-      ? `${Math.ceil(companyIds.length * 0.1)} seconds`
-      : 'A few seconds';
+    
+    // First, check for conflicts
+    setIsProcessing(true);
+    try {
+      const conflictCheck = await checkConflicts({
+        company_ids: companyIds,
+        target_collection_id: targetCollectionId,
+      });
 
-    setConfirmDialog({
-      open: true,
-      title: 'Add Companies to Collection',
-      message: `Add ${companyIds.length.toLocaleString()} companies to "${targetCollection?.collection_name}"?`,
-      itemCount: companyIds.length,
-      onConfirm: async () => {
-        setConfirmDialog(prev => ({ ...prev, open: false }));
-        setIsProcessing(true);
-        try {
-          const operationTitle = `Adding ${companyIds.length.toLocaleString()} companies to ${targetCollection?.collection_name}`;
-          
-          // Generate predictable operation ID that matches backend format
-          const timestamp = Math.floor(Date.now() / 1000);
-          const predictedOperationId = `add_${targetCollectionId}_${timestamp}`;
-          
-          // Set the operation state FIRST to establish WebSocket connection
-          setCurrentOperation({
-            id: predictedOperationId,
-            title: operationTitle,
-            total: companyIds.length,
-            processed: 0
-          });
-          
-          // Wait for WebSocket to connect
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          // Start the bulk operation
-          const response = await bulkAddCompanies(targetCollectionId, companyIds);
-          
-          // Update with actual operation ID if different
-          if (response.operation_id !== predictedOperationId) {
-            setCurrentOperation(prev => prev ? {
-              ...prev,
-              id: response.operation_id
-            } : null);
-          }
-        } catch (error) {
-          console.error('Error adding companies:', error);
-          setNotification({
-            open: true,
-            message: 'Failed to start bulk add operation',
-            severity: 'error'
-          });
-          setIsProcessing(false);
-          setCurrentOperation(null);
-        }
+      // If there are conflicts or duplicates, show the conflict resolution dialog
+      if (conflictCheck.conflicts.length > 0 || conflictCheck.duplicates.length > 0) {
+        setConflictDialog({
+          open: true,
+          conflictInfo: conflictCheck,
+          targetCollectionId,
+          targetCollectionName: targetCollection?.collection_name || '',
+          companyIds,
+        });
+        setIsProcessing(false);
+        return;
       }
-    });
-  }, [collectionResponse, clearSelection]);
+
+      // No conflicts, proceed with the operation
+      await proceedWithBulkAdd(targetCollectionId, companyIds, targetCollection?.collection_name || '');
+    } catch (error) {
+      console.error('Error checking conflicts:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to check for conflicts',
+        severity: 'error',
+      });
+      setIsProcessing(false);
+    }
+  }, [collectionResponse]);
+
+  const proceedWithBulkAdd = async (targetCollectionId: string, companyIds: number[], collectionName: string) => {
+    setIsProcessing(true);
+    try {
+      const operationTitle = `Adding ${companyIds.length.toLocaleString()} companies to ${collectionName}`;
+      
+      // Generate predictable operation ID that matches backend format
+      const timestamp = Math.floor(Date.now() / 1000);
+      const predictedOperationId = `add_${targetCollectionId}_${timestamp}`;
+      
+      // Set the operation state FIRST to establish WebSocket connection
+      setCurrentOperation({
+        id: predictedOperationId,
+        title: operationTitle,
+        total: companyIds.length,
+        processed: 0
+      });
+      
+      // Wait for WebSocket to connect
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Start the bulk operation
+      const response = await bulkAddCompanies(targetCollectionId, companyIds);
+      
+      // Update with actual operation ID if different
+      if (response.operation_id !== predictedOperationId) {
+        setCurrentOperation(prev => prev ? {
+          ...prev,
+          id: response.operation_id
+        } : null);
+      }
+    } catch (error) {
+      console.error('Error adding companies:', error);
+      setNotification({
+        open: true,
+        message: 'Failed to start bulk add operation',
+        severity: 'error'
+      });
+      setIsProcessing(false);
+      setCurrentOperation(null);
+    }
+  };
 
   const handleBulkRemove = useCallback((companyIds: number[]) => {
     if (!selectedCollectionId) return;
@@ -413,25 +455,68 @@ function AppContent() {
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff' }}>
         {selectedCollectionId && collectionResponse && (
           <>
-            {/* Action Bar */}
-            <Box sx={{ p: 2, borderBottom: '1px solid #e8eaed' }}>
-              <BulkActionBar
-                collections={collectionResponse}
-                currentCollectionId={selectedCollectionId}
-                onBulkAdd={handleBulkAdd}
-                onBulkRemove={handleBulkRemove}
-                onSelectAll={handleSelectAll}
-                isLoading={isProcessing}
-              />
-            </Box>
+            {/* Action Bar - Only show in selection mode */}
+            {selectionMode && (
+              <Box sx={{ p: 2, borderBottom: '1px solid #e8eaed' }}>
+                <BulkActionBar
+                  collections={collectionResponse}
+                  currentCollectionId={selectedCollectionId}
+                  onBulkAdd={handleBulkAdd}
+                  onBulkRemove={handleBulkRemove}
+                  onSelectAll={handleSelectAll}
+                  isLoading={isProcessing}
+                />
+              </Box>
+            )}
             
             {/* Table */}
             <Box sx={{ flex: 1, p: 2 }}>
-              <CompanyTable selectedCollectionId={selectedCollectionId} />
+              <EnhancedCompanyTable 
+                selectedCollectionId={selectedCollectionId}
+                selectionMode={selectionMode}
+                onSelectionModeChange={setSelectionMode}
+              />
             </Box>
           </>
         )}
       </Box>
+      
+      <ConflictResolutionDialog
+        open={conflictDialog.open}
+        onClose={() => setConflictDialog(prev => ({ ...prev, open: false }))}
+        conflictInfo={conflictDialog.conflictInfo}
+        targetCollectionName={conflictDialog.targetCollectionName}
+        onResolve={async (action) => {
+          if (action === 'cancel') {
+            setConflictDialog(prev => ({ ...prev, open: false }));
+            return;
+          }
+
+          const { conflictInfo, targetCollectionId, companyIds } = conflictDialog;
+          if (!conflictInfo) return;
+
+          let idsToAdd: number[] = [];
+          if (action === 'move') {
+            // Add all non-duplicate companies (safe + conflicts)
+            idsToAdd = [...conflictInfo.safe_to_add, ...conflictInfo.conflicts.map(c => c.company_id)];
+          } else if (action === 'skip') {
+            // Only add safe companies
+            idsToAdd = conflictInfo.safe_to_add;
+          }
+
+          setConflictDialog(prev => ({ ...prev, open: false }));
+          
+          if (idsToAdd.length > 0) {
+            await proceedWithBulkAdd(targetCollectionId, idsToAdd, conflictDialog.targetCollectionName);
+          } else {
+            setNotification({
+              open: true,
+              message: 'No companies to add after resolving conflicts',
+              severity: 'info',
+            });
+          }
+        }}
+      />
       
       <ConfirmationDialog
         open={confirmDialog.open}

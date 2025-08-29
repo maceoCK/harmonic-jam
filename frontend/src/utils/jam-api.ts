@@ -123,3 +123,29 @@ export async function getOperationStatus(operationId: string): Promise<IBulkOper
         throw error;
     }
 }
+
+export interface IConflictCheckRequest {
+    company_ids: number[];
+    target_collection_id: string;
+}
+
+export interface IConflictCheckResponse {
+    conflicts: Array<{
+        company_id: number;
+        conflict_type: string;
+        message: string;
+    }>;
+    duplicates: number[];
+    safe_to_add: number[];
+    total_checked: number;
+}
+
+export async function checkConflicts(request: IConflictCheckRequest): Promise<IConflictCheckResponse> {
+    try {
+        const response = await axios.post(`${BASE_URL}/companies/check-conflicts`, request);
+        return response.data;
+    } catch (error) {
+        console.error('Error checking conflicts:', error);
+        throw error;
+    }
+}
