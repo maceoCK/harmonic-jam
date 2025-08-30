@@ -11,6 +11,7 @@ import ConflictResolutionDialog, { ConflictInfo } from "./components/ConflictRes
 import ClearStatusesDialog from "./components/ClearStatusesDialog";
 import ProgressModal from "./components/ProgressModal";
 import CompanyDetailDrawer from "./components/CompanyDetailDrawer";
+import SmartFilters, { FilterState } from "./components/SmartFilters";
 import { 
   getCollectionsMetadata, 
   bulkAddCompanies, 
@@ -190,7 +191,16 @@ function AppContent() {
   // New state for rich company data features
   const [selectedCompany, setSelectedCompany] = useState<ICompany | null>(null);
   const [companyDetailOpen, setCompanyDetailOpen] = useState(false);
-  const [filters] = useState<any>({});
+  
+  // Global filter and sort state
+  const [globalFilters, setGlobalFilters] = useState<FilterState>({
+    industries: [],
+    stages: [],
+    employeeRange: [0, 10000],
+    fundingRange: [0, 100000000],
+    foundedYearRange: [1900, new Date().getFullYear()],
+  });
+  const [sortModel, setSortModel] = useState<{ field: string; sort: 'asc' | 'desc' } | null>(null);
   
   const [conflictDialog, setConflictDialog] = useState<{
     open: boolean;
@@ -510,7 +520,7 @@ function AppContent() {
   }, [clearSelection]);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f8f9fa' }}>
+    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f8f9fa', margin: 0, padding: 0 }}>
       {/* Sidebar */}
       <Paper
         elevation={0}
@@ -520,6 +530,7 @@ function AppContent() {
           bgcolor: 'background.paper',
           display: 'flex',
           flexDirection: 'column',
+          margin: 0,
         }}
       >
         {/* Logo/Title */}
@@ -583,6 +594,16 @@ function AppContent() {
 
       {/* Main Content */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff' }}>
+        {/* Smart Filters */}
+        <SmartFilters
+          filters={globalFilters}
+          onFiltersChange={setGlobalFilters}
+          onApplyFilters={() => {
+            // Trigger refresh with filters
+            window.location.reload(); // TODO: Implement proper filter application
+          }}
+        />
+        
         {selectedCollectionId && collectionResponse && (
           <>
             {/* Action Bar - Only show container when items selected */}
@@ -605,7 +626,9 @@ function AppContent() {
               <EnhancedCompanyTable 
                 selectedCollectionId={selectedCollectionId}
                 collections={collectionResponse}
-                filters={filters}
+                filters={globalFilters}
+                sortModel={sortModel}
+                onSortModelChange={setSortModel}
                 onCompanySelect={handleCompanySelect}
               />
             </Box>

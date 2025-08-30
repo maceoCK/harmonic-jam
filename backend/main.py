@@ -233,10 +233,11 @@ def generate_headcount_history(founded_year: int, current_headcount: int) -> Lis
 
 
 def generate_funding_history(founded_year: int, funding_stage: str) -> List[Dict[str, Any]]:
-    """Generate realistic funding history."""
+    """Generate realistic funding history with proper chronological order."""
     if funding_stage == "Bootstrapped":
         return []
     
+    # Define the stages that should be included based on current stage
     stage_map = {
         "Pre-seed": ["Pre-seed"],
         "Seed": ["Pre-seed", "Seed"],
@@ -247,6 +248,7 @@ def generate_funding_history(founded_year: int, funding_stage: str) -> List[Dict
         "Public": ["Pre-seed", "Seed", "Series A", "Series B", "Series C", "Series D", "IPO"]
     }
     
+    # Realistic funding amounts by stage
     funding_amounts = {
         "Pre-seed": (100000, 1000000),
         "Seed": (1000000, 5000000),
@@ -257,26 +259,48 @@ def generate_funding_history(founded_year: int, funding_stage: str) -> List[Dict
         "IPO": (100000000, 500000000)
     }
     
+    # Typical time between rounds (in months)
+    time_between_rounds = {
+        "Pre-seed": 0,  # Starting point
+        "Seed": (6, 18),  # 6-18 months after pre-seed
+        "Series A": (12, 24),  # 12-24 months after seed
+        "Series B": (12, 24),  # 12-24 months after A
+        "Series C": (18, 30),  # 18-30 months after B
+        "Series D": (18, 36),  # 18-36 months after C
+        "IPO": (24, 48)  # 24-48 months after D
+    }
+    
     stages = stage_map.get(funding_stage, ["Seed"])
     history = []
     current_year = datetime.now().year
+    current_month = datetime.now().month
     
-    for i, stage in enumerate(stages):
-        # Distribute funding rounds over company lifetime
-        years_since_founding = (current_year - founded_year)
-        funding_year = founded_year + max(0, int(years_since_founding * (i + 1) / len(stages)) + random.randint(-1, 1))
-        funding_year = min(funding_year, current_year)
+    # Start with the founding date
+    current_date = datetime(founded_year, random.randint(1, 12), 1)
+    
+    for stage in stages:
+        # Add time between rounds (except for first round)
+        if stage != "Pre-seed" and stage in time_between_rounds:
+            min_months, max_months = time_between_rounds[stage]
+            months_to_add = random.randint(min_months, max_months)
+            current_date = current_date + timedelta(days=months_to_add * 30)
         
+        # Don't generate future funding rounds
+        if current_date.year > current_year or (current_date.year == current_year and current_date.month > current_month):
+            break
+        
+        # Generate funding amount for this round
         min_amount, max_amount = funding_amounts.get(stage, (1000000, 10000000))
         amount = random.randint(min_amount, max_amount)
         
-        funding_month = random.randint(1, 12)
-        
         history.append({
-            "date": f"{funding_year}-{funding_month:02d}",
+            "date": f"{current_date.year}-{current_date.month:02d}",
             "round": stage,
             "amount": amount
         })
+    
+    # Sort by date to ensure chronological order
+    history.sort(key=lambda x: x["date"])
     
     return history
 
@@ -340,7 +364,7 @@ def generate_revenue_history(founded_year: int, funding_stage: str, industry: st
 
 
 def generate_valuation_history(funding_history: List[Dict[str, Any]], revenue_history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Generate valuation history based on funding rounds."""
+    """Generate valuation history based on funding rounds with funding events marked."""
     if not funding_history:
         return []
     
@@ -357,6 +381,7 @@ def generate_valuation_history(funding_history: List[Dict[str, Any]], revenue_hi
         "IPO": (5, 25)  # Public companies often get premium
     }
     
+    # First, add all funding rounds as valuation events
     for funding_round in funding_history:
         stage = funding_round["round"]
         amount = funding_round["amount"]
@@ -385,10 +410,48 @@ def generate_valuation_history(funding_history: List[Dict[str, Any]], revenue_hi
             valuation = amount * random.uniform(10, 25)
         
         history.append({
-            "date": funding_round["date"],
+            "date": funding_round["date"] + "-01",  # Add day for proper date parsing
             "valuation": int(valuation),
-            "round": stage
+            "isFundingEvent": True,  # Mark as funding event
+            "eventNote": f"{stage}: ${amount:,.0f}"  # Add event description
         })
+    
+    # Add intermediate valuations between funding rounds for smoother chart
+    if len(history) > 1:
+        additional_points = []
+        for i in range(len(history) - 1):
+            current_event = history[i]
+            next_event = history[i + 1]
+            
+            # Parse dates
+            current_date = datetime.strptime(current_event["date"], "%Y-%m-%d")
+            next_date = datetime.strptime(next_event["date"], "%Y-%m-%d")
+            
+            # Calculate time difference in months
+            months_diff = (next_date.year - current_date.year) * 12 + (next_date.month - current_date.month)
+            
+            # Add quarterly valuation updates between funding rounds
+            if months_diff > 6:
+                quarters_to_add = min(3, months_diff // 3)
+                for q in range(1, quarters_to_add + 1):
+                    intermediate_date = current_date + timedelta(days=q * 90)
+                    if intermediate_date < next_date:
+                        # Linear interpolation of valuation with some randomness
+                        progress = q / (quarters_to_add + 1)
+                        base_valuation = current_event["valuation"] + (next_event["valuation"] - current_event["valuation"]) * progress
+                        # Add 5-10% variance
+                        valuation_variance = random.uniform(0.95, 1.10)
+                        
+                        additional_points.append({
+                            "date": intermediate_date.strftime("%Y-%m-%d"),
+                            "valuation": int(base_valuation * valuation_variance),
+                            "isFundingEvent": False
+                        })
+        
+        history.extend(additional_points)
+    
+    # Sort by date to ensure chronological order
+    history.sort(key=lambda x: x["date"])
     
     return history
 

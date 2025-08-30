@@ -50,6 +50,8 @@ interface EnhancedCompanyTableProps {
   selectedCollectionId: string;
   collections: ICollection[];
   filters?: any;
+  sortModel?: { field: string; sort: 'asc' | 'desc' } | null;
+  onSortModelChange?: (model: { field: string; sort: 'asc' | 'desc' } | null) => void;
   onCompanySelect?: (company: ICompany) => void;
 }
 
@@ -57,6 +59,8 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   selectedCollectionId,
   collections,
   filters,
+  sortModel,
+  onSortModelChange,
   onCompanySelect,
 }) => {
   const [response, setResponse] = useState<ICompany[]>([]);
@@ -323,7 +327,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     {
       field: 'company_name',
       headerName: 'Company Name',
-      flex: 1,
+      width: 250,
       minWidth: 200,
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ 
@@ -659,6 +663,25 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           columnHeaderHeight={48}
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={setColumnVisibilityModel}
+          autoHeight={false}
+          sortingMode="server"
+          sortModel={sortModel ? [sortModel] : []}
+          onSortModelChange={(model) => {
+            if (onSortModelChange) {
+              onSortModelChange(model.length > 0 ? model[0] as any : null);
+            }
+          }}
+          sx={{ 
+            '& .MuiDataGrid-virtualScroller': {
+              overflowX: 'auto',
+            },
+            '& .MuiDataGrid-columnHeaders': {
+              minWidth: '100%',
+            },
+            '& .MuiDataGrid-row': {
+              minWidth: '100%',
+            },
+          }}
           initialState={{
             pagination: {
               paginationModel: { page: 0, pageSize: 25 },
