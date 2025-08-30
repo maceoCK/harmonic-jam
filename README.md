@@ -270,7 +270,6 @@ npm run dev
 - Search response time: <100ms for 10k companies
 - Bulk selection: Instant for 10k items
 - Progress updates: Real-time via WebSocket
-- UI responsiveness: 60 FPS during operations
 
 ## 🙏 Acknowledgments
 
