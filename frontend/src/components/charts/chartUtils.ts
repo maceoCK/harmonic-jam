@@ -70,7 +70,7 @@ export const getChartColors = (): string[] => [
 export const formatDate = (date: string | Date, format: 'short' | 'medium' | 'long' = 'short'): string => {
   const dateObj = typeof date === 'string' ? new Date(date) : date;
   
-  const options: Intl.DateTimeFormatOptions = {
+  const options: Record<string, Intl.DateTimeFormatOptions> = {
     short: { month: 'short', year: 'numeric' },
     medium: { month: 'short', day: 'numeric', year: 'numeric' },
     long: { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' },
