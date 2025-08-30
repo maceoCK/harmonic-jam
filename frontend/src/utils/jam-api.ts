@@ -7,6 +7,24 @@ export interface ICompany {
     ignored?: boolean;
     industry?: string;
     description?: string;
+    website?: string;
+    founded_year?: number;
+    location?: string;
+    total_funding?: number;
+    last_funding_round?: string;
+    last_funding_amount?: number;
+    valuation?: number;
+    revenue?: number;
+    employee_count?: number;
+    growth_rate?: number;
+    company_stage?: string;
+    technologies?: string;
+    headcount_history?: Array<{date: string; count: number}>;
+    funding_history?: Array<{date: string; amount: number; round: string}>;
+    revenue_history?: Array<{date: string; amount: number}>;
+    linkedin_url?: string;
+    twitter_url?: string;
+    crunchbase_url?: string;
 }
 
 export interface ICollection {
@@ -169,6 +187,129 @@ export async function checkStatuses(request: IStatusCheckRequest): Promise<IStat
         return response.data;
     } catch (error) {
         console.error('Error checking statuses:', error);
+        throw error;
+    }
+}
+
+// Filter interfaces
+export interface ICompanyFilters {
+    industries?: string[];
+    funding_min?: number;
+    funding_max?: number;
+    employee_count_min?: number;
+    employee_count_max?: number;
+    founded_year_min?: number;
+    founded_year_max?: number;
+    company_stages?: string[];
+}
+
+// Analytics interfaces
+export interface IIndustryAnalytics {
+    industry: string;
+    count: number;
+    avg_funding: number;
+    avg_employee_count: number;
+    avg_valuation: number;
+}
+
+export interface IFundingAnalytics {
+    total_funding: number;
+    avg_funding_per_company: number;
+    funding_by_stage: Array<{
+        stage: string;
+        total_funding: number;
+        company_count: number;
+    }>;
+    funding_by_year: Array<{
+        year: number;
+        total_funding: number;
+        company_count: number;
+    }>;
+}
+
+export interface IMetrics {
+    total_companies: number;
+    total_funding: number;
+    avg_employee_count: number;
+    top_industries: string[];
+    companies_by_stage: Record<string, number>;
+}
+
+// New API functions for analytics
+export async function getCompaniesWithFilters(
+    offset?: number, 
+    limit?: number, 
+    filters?: ICompanyFilters
+): Promise<ICompanyBatchResponse> {
+    try {
+        const params: any = { offset, limit };
+        if (filters) {
+            Object.assign(params, filters);
+        }
+        const response = await axios.get(`${BASE_URL}/companies`, { params });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching filtered companies:', error);
+        throw error;
+    }
+}
+
+export async function getCompanyById(id: number): Promise<ICompany> {
+    try {
+        const response = await axios.get(`${BASE_URL}/companies/${id}`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching company details:', error);
+        throw error;
+    }
+}
+
+export async function getIndustryAnalytics(): Promise<IIndustryAnalytics[]> {
+    try {
+        const response = await axios.get(`${BASE_URL}/analytics/industries`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching industry analytics:', error);
+        throw error;
+    }
+}
+
+export async function getFundingAnalytics(): Promise<IFundingAnalytics> {
+    try {
+        const response = await axios.get(`${BASE_URL}/analytics/funding`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching funding analytics:', error);
+        throw error;
+    }
+}
+
+export async function getMetrics(): Promise<IMetrics> {
+    try {
+        const response = await axios.get(`${BASE_URL}/analytics/metrics`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching metrics:', error);
+        throw error;
+    }
+}
+
+export async function getIndustries(): Promise<string[]> {
+    try {
+        const response = await axios.get(`${BASE_URL}/industries`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching industries:', error);
+        throw error;
+    }
+}
+
+export async function getCompanyStages(): Promise<string[]> {
+    try {
+        const response = await axios.get(`${BASE_URL}/company-stages`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching company stages:', error);
         throw error;
     }
 }

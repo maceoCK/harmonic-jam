@@ -2,15 +2,15 @@ import "./App.css";
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { Snackbar, Alert, Box, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Chip, Container } from "@mui/material";
+import { Snackbar, Alert, Box, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Chip } from "@mui/material";
 import { useEffect, useState, useCallback } from "react";
-import CompanyTable from "./components/CompanyTable";
 import EnhancedCompanyTable from "./components/EnhancedCompanyTable";
 import BulkActionBar from "./components/BulkActionBar";
 import ConfirmationDialog from "./components/ConfirmationDialog";
 import ConflictResolutionDialog, { ConflictInfo } from "./components/ConflictResolutionDialog";
 import ClearStatusesDialog from "./components/ClearStatusesDialog";
 import ProgressModal from "./components/ProgressModal";
+import CompanyDetailDrawer from "./components/CompanyDetailDrawer";
 import { 
   getCollectionsMetadata, 
   bulkAddCompanies, 
@@ -18,7 +18,8 @@ import {
   getAllCompanyIdsInCollection,
   checkConflicts,
   checkStatuses,
-  IConflictCheckResponse,
+  ICompany,
+  getCompanyById,
 } from "./utils/jam-api";
 import useApi from "./utils/useApi";
 import useWebSocket from "./hooks/useWebSocket";
@@ -186,6 +187,11 @@ function AppContent() {
     severity: 'success' | 'error' | 'info' | 'warning';
   }>({ open: false, message: '', severity: 'info' });
   
+  // New state for rich company data features
+  const [selectedCompany, setSelectedCompany] = useState<ICompany | null>(null);
+  const [companyDetailOpen, setCompanyDetailOpen] = useState(false);
+  const [filters] = useState<any>({});
+  
   const [conflictDialog, setConflictDialog] = useState<{
     open: boolean;
     conflictInfo: ConflictInfo | null;
@@ -219,6 +225,21 @@ function AppContent() {
   });
   
   const { selectAll, clearSelection, getSelectedIds, selectedCompanyIds } = useSelection();
+  
+  const handleCompanySelect = useCallback(async (company: ICompany) => {
+    try {
+      // Fetch full company details if needed
+      const fullCompany = await getCompanyById(company.id);
+      setSelectedCompany(fullCompany);
+      setCompanyDetailOpen(true);
+    } catch (error) {
+      console.error('Error fetching company details:', error);
+      // Fallback to using the partial data
+      setSelectedCompany(company);
+      setCompanyDetailOpen(true);
+    }
+  }, []);
+  
   
   const handleClearStatuses = useCallback(async (companyIds: number[]) => {
     const likedCollection = collectionResponse?.find(c => c.collection_name === 'Liked Companies List');
@@ -584,6 +605,8 @@ function AppContent() {
               <EnhancedCompanyTable 
                 selectedCollectionId={selectedCollectionId}
                 collections={collectionResponse}
+                filters={filters}
+                onCompanySelect={handleCompanySelect}
               />
             </Box>
           </>
@@ -658,6 +681,15 @@ function AppContent() {
         webSocketMessage={lastMessage}
         initialTotal={currentOperation?.total}
         initialProcessed={currentOperation?.processed}
+      />
+      
+      <CompanyDetailDrawer
+        company={selectedCompany}
+        open={companyDetailOpen}
+        onClose={() => {
+          setCompanyDetailOpen(false);
+          setSelectedCompany(null);
+        }}
       />
       
       <Snackbar
