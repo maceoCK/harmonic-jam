@@ -749,21 +749,21 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
               willChange: 'transform',
               transform: 'translateZ(0)',
             },
-            // Alternate row colors for sticky columns
-            '& .MuiDataGrid-row:nth-of-type(even) .MuiDataGrid-cell[data-field="status"]': {
+            // Alternate row colors for sticky columns (only when not selected)
+            '& .MuiDataGrid-row:nth-of-type(even):not(.row-selected) .MuiDataGrid-cell[data-field="status"]': {
               backgroundColor: '#fafafa !important',
             },
-            '& .MuiDataGrid-row:nth-of-type(even) .MuiDataGrid-cell[data-field="company_name"]': {
+            '& .MuiDataGrid-row:nth-of-type(even):not(.row-selected) .MuiDataGrid-cell[data-field="company_name"]': {
               backgroundColor: '#fafafa !important',
             },
-            // Hover states for sticky columns
-            '& .MuiDataGrid-row:hover .MuiDataGrid-cell[data-field="status"]': {
+            // Hover states for sticky columns (when not selected)
+            '& .MuiDataGrid-row:not(.row-selected):hover .MuiDataGrid-cell[data-field="status"]': {
               backgroundColor: 'rgb(216, 230, 248) !important',
             },
-            '& .MuiDataGrid-row:hover .MuiDataGrid-cell[data-field="company_name"]': {
+            '& .MuiDataGrid-row:not(.row-selected):hover .MuiDataGrid-cell[data-field="company_name"]': {
               backgroundColor: 'rgb(216, 230, 248) !important',
             },
-            // Selected row states for sticky columns
+            // Selected row states for sticky columns - all have same blue
             '& .row-selected .MuiDataGrid-cell[data-field="status"]': {
               backgroundColor: 'rgba(26, 115, 232, 0.08) !important',
             },

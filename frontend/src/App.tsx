@@ -145,23 +145,6 @@ const lightTheme = createTheme({
         },
       },
     },
-    MuiDataGrid: {
-      styleOverrides: {
-        root: {
-          border: 'none',
-          '& .MuiDataGrid-cell': {
-            borderBottom: '1px solid #e8eaed',
-          },
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: '#f8f9fa',
-            borderBottom: '1px solid #e8eaed',
-          },
-          '& .MuiDataGrid-footerContainer': {
-            borderTop: '1px solid #e8eaed',
-          },
-        },
-      },
-    },
   },
 });
 
