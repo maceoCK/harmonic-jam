@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta, date
 from typing import List, Dict, Any
 import randomname
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.concurrency import asynccontextmanager
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -712,6 +712,34 @@ app.include_router(companies.router)
 app.include_router(collections.router)
 app.include_router(bulk_operations.router)
 app.include_router(websocket.router)
+
+
+# Root-level endpoints for filter options
+@app.get("/industries")
+def get_industries(db: Session = Depends(database.get_db)):
+    """Get list of unique industries from all companies"""
+    industries = (
+        db.query(database.Company.industry)
+        .distinct()
+        .filter(database.Company.industry.isnot(None))
+        .order_by(database.Company.industry)
+        .all()
+    )
+    return [ind[0] for ind in industries if ind[0]]
+
+
+@app.get("/company-stages")
+def get_company_stages(db: Session = Depends(database.get_db)):
+    """Get list of unique company stages from all companies"""
+    stages = (
+        db.query(database.Company.company_stage)
+        .distinct()
+        .filter(database.Company.company_stage.isnot(None))
+        .order_by(database.Company.company_stage)
+        .all()
+    )
+    return [stage[0] for stage in stages if stage[0]]
+
 
 app.add_middleware(
     CORSMiddleware,
