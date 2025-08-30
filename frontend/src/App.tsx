@@ -11,7 +11,6 @@ import ConflictResolutionDialog, { ConflictInfo } from "./components/ConflictRes
 import ClearStatusesDialog from "./components/ClearStatusesDialog";
 import ProgressModal from "./components/ProgressModal";
 import CompanyDetailDrawer from "./components/CompanyDetailDrawer";
-import SmartFilters, { FilterState } from "./components/SmartFilters";
 import { 
   getCollectionsMetadata, 
   bulkAddCompanies, 
@@ -594,16 +593,6 @@ function AppContent() {
 
       {/* Main Content */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff' }}>
-        {/* Smart Filters */}
-        <SmartFilters
-          filters={globalFilters}
-          onFiltersChange={setGlobalFilters}
-          onApplyFilters={() => {
-            // Trigger refresh with filters
-            window.location.reload(); // TODO: Implement proper filter application
-          }}
-        />
-        
         {selectedCollectionId && collectionResponse && (
           <>
             {/* Action Bar - Only show container when items selected */}

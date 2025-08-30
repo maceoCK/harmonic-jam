@@ -36,6 +36,9 @@ import PeopleIcon from '@mui/icons-material/People';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { 
   getCollectionsById, 
   getAllCompanyIdsInCollection, 
@@ -43,8 +46,11 @@ import {
   ICollection,
   bulkAddCompanies,
   bulkRemoveCompanies,
+  getIndustries,
+  getCompanyStages,
 } from '../utils/jam-api';
 import { useSelection } from '../contexts/SelectionContext';
+import ColumnFilterMenu, { ColumnFilter, ColumnSort } from './ColumnFilterMenu';
 
 interface EnhancedCompanyTableProps {
   selectedCollectionId: string;
@@ -82,6 +88,14 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   });
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  
+  // Filter and sort state
+  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>({});
+  const [columnSort, setColumnSort] = useState<ColumnSort | null>(null);
+  const [filterMenuAnchor, setFilterMenuAnchor] = useState<HTMLElement | null>(null);
+  const [activeFilterField, setActiveFilterField] = useState<string>('');
+  const [availableIndustries, setAvailableIndustries] = useState<string[]>([]);
+  const [availableStages, setAvailableStages] = useState<string[]>([]);
 
   const {
     selectedCompanyIds,
@@ -140,9 +154,87 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedCompanyIds, selectedCollectionId, clearSelection]);
 
+  // Load filter options on mount
+  useEffect(() => {
+    const loadFilterOptions = async () => {
+      try {
+        const [industries, stages] = await Promise.all([
+          getIndustries(),
+          getCompanyStages(),
+        ]);
+        setAvailableIndustries(industries);
+        setAvailableStages(stages);
+      } catch (error) {
+        console.error('Error loading filter options:', error);
+      }
+    };
+    loadFilterOptions();
+    
+    // Load saved filters from localStorage
+    const savedFilters = localStorage.getItem('companyTableFilters');
+    const savedSort = localStorage.getItem('companyTableSort');
+    
+    if (savedFilters) {
+      setColumnFilters(JSON.parse(savedFilters));
+    }
+    if (savedSort) {
+      setColumnSort(JSON.parse(savedSort));
+    }
+  }, []);
+  
+  // Save filters to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('companyTableFilters', JSON.stringify(columnFilters));
+  }, [columnFilters]);
+  
+  useEffect(() => {
+    if (columnSort) {
+      localStorage.setItem('companyTableSort', JSON.stringify(columnSort));
+    } else {
+      localStorage.removeItem('companyTableSort');
+    }
+  }, [columnSort]);
+  
   useEffect(() => {
     setLoading(true);
-    getCollectionsById(selectedCollectionId, offset, pageSize).then(
+    
+    // Build query params from filters
+    const params: any = { offset, limit: pageSize };
+    
+    // Add filter parameters
+    Object.values(columnFilters).forEach(filter => {
+      if (filter.operator === 'contains' && filter.value) {
+        // For text search, we'll need to handle this differently
+        // For now, skip text filters
+      } else if (filter.operator === 'between' && filter.value) {
+        const [min, max] = filter.value;
+        if (filter.field === 'employee_count') {
+          params.employee_min = min;
+          params.employee_max = max;
+        } else if (filter.field === 'total_funding') {
+          params.funding_min = min;
+          params.funding_max = max;
+        } else if (filter.field === 'founded_year') {
+          params.founded_year_min = min;
+          params.founded_year_max = max;
+        }
+      } else if (filter.operator === 'in' && filter.value?.length > 0) {
+        if (filter.field === 'industry') {
+          params.industries = filter.value;
+        } else if (filter.field === 'company_stage') {
+          params.company_stages = filter.value;
+        }
+      }
+    });
+    
+    // Add sort parameters
+    if (columnSort) {
+      params.sort_by = columnSort.field;
+      params.sort_order = columnSort.sort;
+    }
+    
+    // Make API call with filters
+    getCollectionsById(selectedCollectionId, offset, pageSize, params).then(
       (newResponse) => {
         setResponse(newResponse.companies);
         setTotal(newResponse.total);
@@ -150,7 +242,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
         setLoading(false);
       }
     );
-  }, [selectedCollectionId, offset, pageSize, setTotalInCollection]);
+  }, [selectedCollectionId, offset, pageSize, setTotalInCollection, columnFilters, columnSort]);
 
   useEffect(() => {
     setOffset(0);
@@ -255,6 +347,61 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     }
     setExpandedRows(newExpandedRows);
   };
+  
+  // Handle column filter menu
+  const handleFilterClick = (event: React.MouseEvent<HTMLElement>, field: string) => {
+    event.stopPropagation();
+    setFilterMenuAnchor(event.currentTarget);
+    setActiveFilterField(field);
+  };
+  
+  const handleFilterChange = (filter: ColumnFilter | null) => {
+    if (filter) {
+      setColumnFilters(prev => ({ ...prev, [filter.field]: filter }));
+    } else {
+      setColumnFilters(prev => {
+        const newFilters = { ...prev };
+        delete newFilters[activeFilterField];
+        return newFilters;
+      });
+    }
+  };
+  
+  const handleSortChange = (sort: ColumnSort | null) => {
+    if (sort && onSortModelChange) {
+      onSortModelChange(sort);
+    }
+    setColumnSort(sort);
+  };
+  
+  // Custom column header with filter icon
+  const renderColumnHeader = (field: string, label: string, fieldType: 'string' | 'number' | 'select' | 'year' = 'string') => {
+    const hasFilter = columnFilters[field];
+    const hasSort = columnSort?.field === field;
+    
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+        <Typography variant="body2" sx={{ flex: 1 }}>
+          {label}
+        </Typography>
+        {hasSort && (
+          <IconButton size="small" sx={{ ml: 0.5 }}>
+            {columnSort?.sort === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />}
+          </IconButton>
+        )}
+        <IconButton
+          size="small"
+          onClick={(e) => handleFilterClick(e, field)}
+          sx={{ 
+            ml: 0.5,
+            color: hasFilter ? 'primary.main' : 'text.secondary',
+          }}
+        >
+          <FilterListIcon fontSize="small" />
+        </IconButton>
+      </Box>
+    );
+  };
 
   // Column definitions with enhanced visual design
   const columns: GridColDef[] = [
@@ -329,6 +476,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       headerName: 'Company Name',
       width: 250,
       minWidth: 200,
+      renderHeader: () => renderColumnHeader('company_name', 'Company Name', 'string'),
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ 
           display: 'flex', 
@@ -352,6 +500,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'industry',
       headerName: 'Industry',
       width: 150,
+      renderHeader: () => renderColumnHeader('industry', 'Industry', 'select'),
       renderCell: (params: GridRenderCellParams) => (
         params.value ? (
           <Chip
@@ -367,6 +516,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'founded_year',
       headerName: 'Founded',
       width: 100,
+      renderHeader: () => renderColumnHeader('founded_year', 'Founded', 'year'),
       renderCell: (params: GridRenderCellParams) => (
         <Typography variant="body2">{params.value || 'N/A'}</Typography>
       ),
@@ -375,6 +525,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'employee_count',
       headerName: 'Employees',
       width: 120,
+      renderHeader: () => renderColumnHeader('employee_count', 'Employees', 'number'),
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <PeopleIcon fontSize="small" sx={{ color: 'text.secondary' }} />
@@ -386,6 +537,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'total_funding',
       headerName: 'Funding',
       width: 120,
+      renderHeader: () => renderColumnHeader('total_funding', 'Funding', 'number'),
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <AttachMoneyIcon fontSize="small" sx={{ color: 'success.main' }} />
@@ -399,6 +551,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'company_stage',
       headerName: 'Stage',
       width: 120,
+      renderHeader: () => renderColumnHeader('company_stage', 'Stage', 'select'),
       renderCell: (params: GridRenderCellParams) => (
         params.value ? (
           <Chip
@@ -802,6 +955,34 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           }}
         />
       </Box>
+      
+      {/* Column Filter Menu */}
+      <ColumnFilterMenu
+        anchorEl={filterMenuAnchor}
+        open={Boolean(filterMenuAnchor)}
+        onClose={() => setFilterMenuAnchor(null)}
+        field={activeFilterField}
+        fieldType={
+          activeFilterField === 'company_name' ? 'string' :
+          activeFilterField === 'industry' ? 'select' :
+          activeFilterField === 'company_stage' ? 'select' :
+          activeFilterField === 'founded_year' ? 'year' :
+          activeFilterField === 'employee_count' ? 'number' :
+          activeFilterField === 'total_funding' ? 'number' :
+          activeFilterField === 'revenue' ? 'number' :
+          activeFilterField === 'valuation' ? 'number' :
+          'string'
+        }
+        currentFilter={columnFilters[activeFilterField]}
+        currentSort={columnSort?.field === activeFilterField ? columnSort : undefined}
+        onFilterChange={handleFilterChange}
+        onSortChange={handleSortChange}
+        availableOptions={
+          activeFilterField === 'industry' ? availableIndustries :
+          activeFilterField === 'company_stage' ? availableStages :
+          []
+        }
+      />
     </Box>
   );
 };

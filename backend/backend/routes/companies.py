@@ -126,10 +126,9 @@ def fetch_companies_with_liked(
                 last_funding_round=company.last_funding_round,
                 last_funding_amount=company.last_funding_amount,
                 valuation=company.valuation,
-                estimated_revenue=company.estimated_revenue,
+                revenue=company.estimated_revenue,  # Map estimated_revenue to revenue for frontend
                 employee_count=company.employee_count,
-                revenue_growth_rate=company.revenue_growth_rate,
-                employee_growth_rate=company.employee_growth_rate,
+                growth_rate=company.revenue_growth_rate,  # Map to growth_rate for frontend
                 linkedin_url=company.linkedin_url,
                 twitter_url=company.twitter_handle,  # Map twitter_handle to twitter_url for frontend
                 crunchbase_url=company.crunchbase_url,

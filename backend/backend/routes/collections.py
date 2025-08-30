@@ -58,6 +58,18 @@ def get_company_collection_by_id(
         0, description="The number of items to skip from the beginning"
     ),
     limit: int = Query(10, description="The number of items to fetch"),
+    # Filter parameters
+    industries: list[str] = Query(default=None),
+    company_stages: list[str] = Query(default=None),
+    employee_min: int = Query(default=None),
+    employee_max: int = Query(default=None),
+    funding_min: int = Query(default=None),
+    funding_max: int = Query(default=None),
+    founded_year_min: int = Query(default=None),
+    founded_year_max: int = Query(default=None),
+    # Sort parameters
+    sort_by: str = Query(default=None),
+    sort_order: str = Query(default="asc"),
     db: Session = Depends(database.get_db),
 ):
     query = (
@@ -65,6 +77,33 @@ def get_company_collection_by_id(
         .join(database.Company)
         .filter(database.CompanyCollectionAssociation.collection_id == collection_id)
     )
+    
+    # Apply filters
+    if industries:
+        query = query.filter(database.Company.industry.in_(industries))
+    if company_stages:
+        query = query.filter(database.Company.company_stage.in_(company_stages))
+    if employee_min is not None:
+        query = query.filter(database.Company.employee_count >= employee_min)
+    if employee_max is not None:
+        query = query.filter(database.Company.employee_count <= employee_max)
+    if funding_min is not None:
+        query = query.filter(database.Company.total_funding >= funding_min)
+    if funding_max is not None:
+        query = query.filter(database.Company.total_funding <= funding_max)
+    if founded_year_min is not None:
+        query = query.filter(database.Company.founded_year >= founded_year_min)
+    if founded_year_max is not None:
+        query = query.filter(database.Company.founded_year <= founded_year_max)
+    
+    # Apply sorting
+    if sort_by:
+        sort_column = getattr(database.Company, sort_by, None)
+        if sort_column:
+            if sort_order == "desc":
+                query = query.order_by(sort_column.desc())
+            else:
+                query = query.order_by(sort_column.asc())
 
     total_count = query.with_entities(func.count()).scalar()
 

@@ -74,13 +74,20 @@ export async function getCompanies(offset?: number, limit?: number): Promise<ICo
     }
 }
 
-export async function getCollectionsById(id: string, offset?: number, limit?: number): Promise<ICollection> {
+export async function getCollectionsById(id: string, offset?: number, limit?: number, filters?: any): Promise<ICollection> {
     try {
+        const params: any = {
+            offset,
+            limit,
+        };
+        
+        // Add filter parameters if provided
+        if (filters) {
+            Object.assign(params, filters);
+        }
+        
         const response = await axios.get(`${BASE_URL}/collections/${id}`, {
-            params: {
-                offset,
-                limit,
-            },
+            params,
         });
         return response.data;
     } catch (error) {
