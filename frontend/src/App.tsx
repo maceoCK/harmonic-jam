@@ -11,6 +11,7 @@ import ConflictResolutionDialog, { ConflictInfo } from "./components/ConflictRes
 import ClearStatusesDialog from "./components/ClearStatusesDialog";
 import ProgressModal from "./components/ProgressModal";
 import CompanyDetailDrawer from "./components/CompanyDetailDrawer";
+import SmartSearchBar from "./components/SmartSearchBar";
 import { 
   getCollectionsMetadata, 
   bulkAddCompanies, 
@@ -191,14 +192,8 @@ function AppContent() {
   const [selectedCompany, setSelectedCompany] = useState<ICompany | null>(null);
   const [companyDetailOpen, setCompanyDetailOpen] = useState(false);
   
-  // Global filter and sort state
-  const [globalFilters, setGlobalFilters] = useState<FilterState>({
-    industries: [],
-    stages: [],
-    employeeRange: [0, 10000],
-    fundingRange: [0, 100000000],
-    foundedYearRange: [1900, new Date().getFullYear()],
-  });
+  // Search and sort state
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortModel, setSortModel] = useState<{ field: string; sort: 'asc' | 'desc' } | null>(null);
   
   const [conflictDialog, setConflictDialog] = useState<{
@@ -519,7 +514,7 @@ function AppContent() {
   }, [clearSelection]);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f8f9fa', margin: 0, padding: 0 }}>
+    <Box sx={{ display: 'flex', height: '100vh', width: '100vw', bgcolor: '#f8f9fa', margin: 0, padding: 0, overflow: 'auto' }}>
       {/* Sidebar */}
       <Paper
         elevation={0}
@@ -592,7 +587,7 @@ function AppContent() {
       </Paper>
 
       {/* Main Content */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff' }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff', minWidth: 0 }}>
         {selectedCollectionId && collectionResponse && (
           <>
             {/* Action Bar - Only show container when items selected */}
@@ -610,12 +605,21 @@ function AppContent() {
               </Box>
             )}
             
+            {/* Search Bar */}
+            <Box sx={{ p: 2, borderBottom: '1px solid #e8eaed' }}>
+              <SmartSearchBar 
+                onSearch={setSearchQuery}
+                placeholder="Search companies using natural language (e.g., 'fintech in NYC', 'series B with >100 employees')"
+              />
+            </Box>
+            
             {/* Table */}
-            <Box sx={{ flex: 1, p: 2, overflow: 'hidden' }}>
+            <Box sx={{ flex: 1, p: 2}}>
               <EnhancedCompanyTable 
                 selectedCollectionId={selectedCollectionId}
                 collections={collectionResponse}
-                filters={globalFilters}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
                 sortModel={sortModel}
                 onSortModelChange={setSortModel}
                 onCompanySelect={handleCompanySelect}
@@ -646,7 +650,7 @@ function AppContent() {
             return;
           }
 
-          const { conflictInfo, targetCollectionId, companyIds } = conflictDialog;
+          const { conflictInfo, targetCollectionId } = conflictDialog;
           if (!conflictInfo) return;
 
           let idsToAdd: number[] = [];

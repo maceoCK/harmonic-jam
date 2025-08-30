@@ -63,10 +63,25 @@ def get_company_collection_by_id(
     company_stages: list[str] = Query(default=None),
     employee_min: int = Query(default=None),
     employee_max: int = Query(default=None),
+    employee_count_equals: int = Query(default=None),
+    employee_count_gt: int = Query(default=None),
+    employee_count_gte: int = Query(default=None),
+    employee_count_lt: int = Query(default=None),
+    employee_count_lte: int = Query(default=None),
     funding_min: int = Query(default=None),
     funding_max: int = Query(default=None),
+    total_funding_equals: int = Query(default=None),
+    total_funding_gt: int = Query(default=None),
+    total_funding_gte: int = Query(default=None),
+    total_funding_lt: int = Query(default=None),
+    total_funding_lte: int = Query(default=None),
     founded_year_min: int = Query(default=None),
     founded_year_max: int = Query(default=None),
+    founded_year_equals: int = Query(default=None),
+    founded_year_gt: int = Query(default=None),
+    founded_year_gte: int = Query(default=None),
+    founded_year_lt: int = Query(default=None),
+    founded_year_lte: int = Query(default=None),
     # Sort parameters
     sort_by: str = Query(default=None),
     sort_order: str = Query(default="asc"),
@@ -83,20 +98,59 @@ def get_company_collection_by_id(
         query = query.filter(database.Company.industry.in_(industries))
     if company_stages:
         query = query.filter(database.Company.company_stage.in_(company_stages))
+    
+    # Employee count filters
     if employee_min is not None:
         query = query.filter(database.Company.employee_count >= employee_min)
     if employee_max is not None:
         query = query.filter(database.Company.employee_count <= employee_max)
+    if employee_count_equals is not None:
+        query = query.filter(database.Company.employee_count == employee_count_equals)
+    if employee_count_gt is not None:
+        query = query.filter(database.Company.employee_count > employee_count_gt)
+    if employee_count_gte is not None:
+        query = query.filter(database.Company.employee_count >= employee_count_gte)
+    if employee_count_lt is not None:
+        query = query.filter(database.Company.employee_count < employee_count_lt)
+    if employee_count_lte is not None:
+        query = query.filter(database.Company.employee_count <= employee_count_lte)
+    
+    # Total funding filters
     if funding_min is not None:
         query = query.filter(database.Company.total_funding >= funding_min)
     if funding_max is not None:
         query = query.filter(database.Company.total_funding <= funding_max)
+    if total_funding_equals is not None:
+        query = query.filter(database.Company.total_funding == total_funding_equals)
+    if total_funding_gt is not None:
+        query = query.filter(database.Company.total_funding > total_funding_gt)
+    if total_funding_gte is not None:
+        query = query.filter(database.Company.total_funding >= total_funding_gte)
+    if total_funding_lt is not None:
+        query = query.filter(database.Company.total_funding < total_funding_lt)
+    if total_funding_lte is not None:
+        query = query.filter(database.Company.total_funding <= total_funding_lte)
+    
+    # Founded year filters
     if founded_year_min is not None:
         query = query.filter(database.Company.founded_year >= founded_year_min)
     if founded_year_max is not None:
         query = query.filter(database.Company.founded_year <= founded_year_max)
+    if founded_year_equals is not None:
+        query = query.filter(database.Company.founded_year == founded_year_equals)
+    if founded_year_gt is not None:
+        query = query.filter(database.Company.founded_year > founded_year_gt)
+    if founded_year_gte is not None:
+        query = query.filter(database.Company.founded_year >= founded_year_gte)
+    if founded_year_lt is not None:
+        query = query.filter(database.Company.founded_year < founded_year_lt)
+    if founded_year_lte is not None:
+        query = query.filter(database.Company.founded_year <= founded_year_lte)
     
-    # Apply sorting
+    # Get total count before applying sorting (ORDER BY not allowed with COUNT)
+    total_count = query.with_entities(func.count()).scalar()
+    
+    # Apply sorting after count
     if sort_by:
         sort_column = getattr(database.Company, sort_by, None)
         if sort_column:
@@ -104,8 +158,6 @@ def get_company_collection_by_id(
                 query = query.order_by(sort_column.desc())
             else:
                 query = query.order_by(sort_column.asc())
-
-    total_count = query.with_entities(func.count()).scalar()
 
     results = query.offset(offset).limit(limit).all()
     companies = fetch_companies_with_liked(db, [company.id for _, company in results])

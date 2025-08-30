@@ -15,6 +15,28 @@ services:
     ports:
       - "5433:5432"
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=company-search
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   web-api:
     build: .
     volumes:
@@ -25,8 +47,11 @@ services:
     command: ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     depends_on:
       - postgres-jam-db
+      - elasticsearch
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres-jam-db:5432/harmonicjam
+      ELASTICSEARCH_URL: http://elasticsearch:9200
 
 volumes:
   postgres_data:
+  elasticsearch_data:

@@ -26,7 +26,7 @@ import {
 
 export interface ColumnFilter {
   field: string;
-  operator: 'equals' | 'contains' | 'gt' | 'lt' | 'between' | 'in';
+  operator: 'equals' | 'contains' | 'gt' | 'lt' | 'gte' | 'lte' | 'between' | 'in';
   value: any;
 }
 
@@ -62,6 +62,7 @@ const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
 }) => {
   const [filterValue, setFilterValue] = useState<any>(currentFilter?.value || '');
   const [rangeValue, setRangeValue] = useState<[number, number]>([0, 100000]);
+  const [selectedOperator, setSelectedOperator] = useState<string>(currentFilter?.operator || (fieldType === 'string' ? 'contains' : 'equals'));
 
   const handleSort = (direction: 'asc' | 'desc') => {
     onSortChange({ field, sort: direction });
@@ -79,24 +80,40 @@ const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
         operator: 'contains',
         value: filterValue,
       });
-    } else if (fieldType === 'number' && rangeValue) {
-      onFilterChange({
-        field,
-        operator: 'between',
-        value: rangeValue,
-      });
+    } else if (fieldType === 'number') {
+      if (selectedOperator === 'between' && rangeValue) {
+        onFilterChange({
+          field,
+          operator: 'between',
+          value: rangeValue,
+        });
+      } else if (selectedOperator !== 'between' && filterValue) {
+        onFilterChange({
+          field,
+          operator: selectedOperator as any,
+          value: Number(filterValue),
+        });
+      }
     } else if (fieldType === 'select' && filterValue.length > 0) {
       onFilterChange({
         field,
         operator: 'in',
         value: filterValue,
       });
-    } else if (fieldType === 'year' && rangeValue) {
-      onFilterChange({
-        field,
-        operator: 'between',
-        value: rangeValue,
-      });
+    } else if (fieldType === 'year') {
+      if (selectedOperator === 'between' && rangeValue) {
+        onFilterChange({
+          field,
+          operator: 'between',
+          value: rangeValue,
+        });
+      } else if (selectedOperator !== 'between' && filterValue) {
+        onFilterChange({
+          field,
+          operator: selectedOperator as any,
+          value: Number(filterValue),
+        });
+      }
     }
     onClose();
   };
@@ -188,37 +205,107 @@ const ColumnFilterMenu: React.FC<ColumnFilterMenuProps> = ({
 
         {fieldType === 'number' && (
           <Box>
-            <Typography variant="caption" color="text.secondary">
-              Range: {rangeValue[0].toLocaleString()} - {rangeValue[1].toLocaleString()}
-            </Typography>
-            <Slider
-              value={rangeValue}
-              onChange={(e, newValue) => setRangeValue(newValue as [number, number])}
-              valueLabelDisplay="auto"
-              min={0}
-              max={field === 'total_funding' ? 100000000 : 
-                   field === 'employee_count' ? 10000 : 
-                   field === 'valuation' ? 1000000000 : 100000000}
-              step={field === 'employee_count' ? 100 : 1000000}
-              size="small"
-            />
+            <FormControl size="small" fullWidth sx={{ mb: 1 }}>
+              <Select
+                value={selectedOperator}
+                onChange={(e) => setSelectedOperator(e.target.value)}
+              >
+                <MenuItem value="equals">Equals</MenuItem>
+                <MenuItem value="gt">Greater than</MenuItem>
+                <MenuItem value="gte">Greater than or equal</MenuItem>
+                <MenuItem value="lt">Less than</MenuItem>
+                <MenuItem value="lte">Less than or equal</MenuItem>
+                <MenuItem value="between">Between</MenuItem>
+              </Select>
+            </FormControl>
+            {selectedOperator === 'between' ? (
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  type="number"
+                  placeholder="Min"
+                  value={rangeValue[0]}
+                  onChange={(e) => setRangeValue([Number(e.target.value), rangeValue[1]])}
+                  sx={{ flex: 1 }}
+                />
+                <Typography variant="body2">-</Typography>
+                <TextField
+                  size="small"
+                  type="number"
+                  placeholder="Max"
+                  value={rangeValue[1]}
+                  onChange={(e) => setRangeValue([rangeValue[0], Number(e.target.value)])}
+                  sx={{ flex: 1 }}
+                />
+              </Box>
+            ) : (
+              <TextField
+                size="small"
+                type="number"
+                fullWidth
+                placeholder="Value"
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleApplyFilter();
+                  }
+                }}
+              />
+            )}
           </Box>
         )}
 
         {fieldType === 'year' && (
           <Box>
-            <Typography variant="caption" color="text.secondary">
-              Years: {rangeValue[0]} - {rangeValue[1]}
-            </Typography>
-            <Slider
-              value={rangeValue}
-              onChange={(e, newValue) => setRangeValue(newValue as [number, number])}
-              valueLabelDisplay="auto"
-              min={1900}
-              max={new Date().getFullYear()}
-              step={1}
-              size="small"
-            />
+            <FormControl size="small" fullWidth sx={{ mb: 1 }}>
+              <Select
+                value={selectedOperator}
+                onChange={(e) => setSelectedOperator(e.target.value)}
+              >
+                <MenuItem value="equals">Equals</MenuItem>
+                <MenuItem value="gt">After</MenuItem>
+                <MenuItem value="gte">After or in</MenuItem>
+                <MenuItem value="lt">Before</MenuItem>
+                <MenuItem value="lte">Before or in</MenuItem>
+                <MenuItem value="between">Between</MenuItem>
+              </Select>
+            </FormControl>
+            {selectedOperator === 'between' ? (
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <TextField
+                  size="small"
+                  type="number"
+                  placeholder="Start year"
+                  value={rangeValue[0]}
+                  onChange={(e) => setRangeValue([Number(e.target.value), rangeValue[1]])}
+                  sx={{ flex: 1 }}
+                />
+                <Typography variant="body2">-</Typography>
+                <TextField
+                  size="small"
+                  type="number"
+                  placeholder="End year"
+                  value={rangeValue[1]}
+                  onChange={(e) => setRangeValue([rangeValue[0], Number(e.target.value)])}
+                  sx={{ flex: 1 }}
+                />
+              </Box>
+            ) : (
+              <TextField
+                size="small"
+                type="number"
+                fullWidth
+                placeholder="Year"
+                value={filterValue}
+                onChange={(e) => setFilterValue(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    handleApplyFilter();
+                  }
+                }}
+              />
+            )}
           </Box>
         )}
 

@@ -13,7 +13,8 @@ from starlette.middleware.cors import CORSMiddleware
 import numpy as np
 
 from backend.db import database
-from backend.routes import collections, companies, bulk_operations, websocket
+from backend.routes import collections, companies, bulk_operations, websocket, search
+from backend.services.search import search_service
 
 
 @asynccontextmanager
@@ -26,7 +27,15 @@ async def lifespan(app: FastAPI):
 
         db.add(database.Settings(setting_name="seeded"))
         db.commit()
-        db.close()
+        
+    # Initialize Elasticsearch and index companies
+    try:
+        search_service.create_index()
+        search_service.index_companies(db)
+    except Exception as e:
+        print(f"Warning: Could not initialize Elasticsearch: {e}")
+        
+    db.close()
     yield
     # Clean up...
 
@@ -712,6 +721,7 @@ app.include_router(companies.router)
 app.include_router(collections.router)
 app.include_router(bulk_operations.router)
 app.include_router(websocket.router)
+app.include_router(search.router)
 
 
 # Root-level endpoints for filter options

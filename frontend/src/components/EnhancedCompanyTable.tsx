@@ -1,10 +1,9 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   DataGrid,
   GridColDef,
   GridRenderCellParams,
   GridRowParams,
-  GridExpandMoreIcon,
 } from '@mui/x-data-grid';
 import {
   Box,
@@ -13,32 +12,22 @@ import {
   Chip,
   Typography,
   Button,
-  Fade,
   Menu,
   MenuItem,
   ListItemIcon,
   ListItemText,
-  Collapse,
-  Card,
-  CardContent,
-  Grid,
+  Checkbox,
+  Divider,
   Link,
 } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
-import RemoveRedEyeIcon from '@mui/icons-material/RemoveRedEye';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import InfoIcon from '@mui/icons-material/Info';
 import LaunchIcon from '@mui/icons-material/Launch';
-import BusinessIcon from '@mui/icons-material/Business';
 import PeopleIcon from '@mui/icons-material/People';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { 
   getCollectionsById, 
   getAllCompanyIdsInCollection, 
@@ -46,16 +35,16 @@ import {
   ICollection,
   bulkAddCompanies,
   bulkRemoveCompanies,
-  getIndustries,
-  getCompanyStages,
+  searchCompanyIds,
 } from '../utils/jam-api';
+import { searchCompanies } from '../utils/search-api';
 import { useSelection } from '../contexts/SelectionContext';
-import ColumnFilterMenu, { ColumnFilter, ColumnSort } from './ColumnFilterMenu';
 
 interface EnhancedCompanyTableProps {
   selectedCollectionId: string;
   collections: ICollection[];
-  filters?: any;
+  searchQuery?: string;
+  setSearchQuery?: (query: string) => void;
   sortModel?: { field: string; sort: 'asc' | 'desc' } | null;
   onSortModelChange?: (model: { field: string; sort: 'asc' | 'desc' } | null) => void;
   onCompanySelect?: (company: ICompany) => void;
@@ -64,7 +53,8 @@ interface EnhancedCompanyTableProps {
 const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   selectedCollectionId,
   collections,
-  filters,
+  searchQuery,
+  setSearchQuery,
   sortModel,
   onSortModelChange,
   onCompanySelect,
@@ -75,6 +65,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(false);
   const [lastSelectedId, setLastSelectedId] = useState<number | null>(null);
+  const [columnMenuAnchor, setColumnMenuAnchor] = useState<HTMLElement | null>(null);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState<Record<string, boolean>>({
     industry: true,
     founded_year: true,
@@ -87,15 +78,9 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     valuation: false,
   });
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   
-  // Filter and sort state
-  const [columnFilters, setColumnFilters] = useState<Record<string, ColumnFilter>>({});
-  const [columnSort, setColumnSort] = useState<ColumnSort | null>(null);
-  const [filterMenuAnchor, setFilterMenuAnchor] = useState<HTMLElement | null>(null);
-  const [activeFilterField, setActiveFilterField] = useState<string>('');
-  const [availableIndustries, setAvailableIndustries] = useState<string[]>([]);
-  const [availableStages, setAvailableStages] = useState<string[]>([]);
+  // Sort state
+  const [columnSort, setColumnSort] = useState<any | null>(null);
 
   const {
     selectedCompanyIds,
@@ -106,22 +91,6 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     clearSelection,
   } = useSelection();
 
-  // Determine which collection we're viewing
-  const currentCollection = useMemo(() => {
-    return collections?.find(c => c.id === selectedCollectionId);
-  }, [collections, selectedCollectionId]);
-  
-  const isLikedCollection = useMemo(() => {
-    return currentCollection?.collection_name === 'Liked Companies List';
-  }, [currentCollection]);
-
-  const isIgnoreCollection = useMemo(() => {
-    return currentCollection?.collection_name === 'Companies to Ignore List';
-  }, [currentCollection]);
-
-  const isMyList = useMemo(() => {
-    return currentCollection?.collection_name === 'My List';
-  }, [currentCollection]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -154,38 +123,14 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedCompanyIds, selectedCollectionId, clearSelection]);
 
-  // Load filter options on mount
+  // Sync sortModel prop with local state
   useEffect(() => {
-    const loadFilterOptions = async () => {
-      try {
-        const [industries, stages] = await Promise.all([
-          getIndustries(),
-          getCompanyStages(),
-        ]);
-        setAvailableIndustries(industries);
-        setAvailableStages(stages);
-      } catch (error) {
-        console.error('Error loading filter options:', error);
-      }
-    };
-    loadFilterOptions();
-    
-    // Load saved filters from localStorage
-    const savedFilters = localStorage.getItem('companyTableFilters');
-    const savedSort = localStorage.getItem('companyTableSort');
-    
-    if (savedFilters) {
-      setColumnFilters(JSON.parse(savedFilters));
+    if (sortModel) {
+      setColumnSort(sortModel);
     }
-    if (savedSort) {
-      setColumnSort(JSON.parse(savedSort));
-    }
-  }, []);
+  }, [sortModel]);
   
   // Save filters to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem('companyTableFilters', JSON.stringify(columnFilters));
-  }, [columnFilters]);
   
   useEffect(() => {
     if (columnSort) {
@@ -196,58 +141,55 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   }, [columnSort]);
   
   useEffect(() => {
-    setLoading(true);
-    
-    // Build query params from filters
-    const params: any = { offset, limit: pageSize };
-    
-    // Add filter parameters
-    Object.values(columnFilters).forEach(filter => {
-      if (filter.operator === 'contains' && filter.value) {
-        // For text search, we'll need to handle this differently
-        // For now, skip text filters
-      } else if (filter.operator === 'between' && filter.value) {
-        const [min, max] = filter.value;
-        if (filter.field === 'employee_count') {
-          params.employee_min = min;
-          params.employee_max = max;
-        } else if (filter.field === 'total_funding') {
-          params.funding_min = min;
-          params.funding_max = max;
-        } else if (filter.field === 'founded_year') {
-          params.founded_year_min = min;
-          params.founded_year_max = max;
+    const fetchData = async () => {
+      setLoading(true);
+      
+      try {
+        if (searchQuery && searchQuery.trim()) {
+          // Use search API when there's a query
+          const searchResults = await searchCompanies(
+            searchQuery,
+            offset,
+            pageSize,
+            selectedCollectionId
+          );
+          setResponse(searchResults.companies);
+          setTotal(searchResults.total);
+          setTotalInCollection(searchResults.total);
+        } else {
+          // Use regular collection API when no search
+          const params: any = { offset, limit: pageSize };
+          
+          // Add sort parameters
+          if (columnSort) {
+            params.sort_by = columnSort.field;
+            params.sort_order = columnSort.sort;
+          }
+          
+          const newResponse = await getCollectionsById(selectedCollectionId, offset, pageSize, params);
+          setResponse(newResponse.companies);
+          setTotal(newResponse.total);
+          setTotalInCollection(newResponse.total);
         }
-      } else if (filter.operator === 'in' && filter.value?.length > 0) {
-        if (filter.field === 'industry') {
-          params.industries = filter.value;
-        } else if (filter.field === 'company_stage') {
-          params.company_stages = filter.value;
-        }
-      }
-    });
-    
-    // Add sort parameters
-    if (columnSort) {
-      params.sort_by = columnSort.field;
-      params.sort_order = columnSort.sort;
-    }
-    
-    // Make API call with filters
-    getCollectionsById(selectedCollectionId, offset, pageSize, params).then(
-      (newResponse) => {
-        setResponse(newResponse.companies);
-        setTotal(newResponse.total);
-        setTotalInCollection(newResponse.total);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
         setLoading(false);
       }
-    );
-  }, [selectedCollectionId, offset, pageSize, setTotalInCollection, columnFilters, columnSort]);
+    };
+    
+    fetchData();
+  }, [selectedCollectionId, offset, pageSize, setTotalInCollection, columnSort, searchQuery]);
 
   useEffect(() => {
     setOffset(0);
     clearSelection();
   }, [selectedCollectionId, clearSelection]);
+
+  // Reset pagination when search query changes
+  useEffect(() => {
+    setOffset(0);
+  }, [searchQuery]);
 
   // Custom row styling for selection
   const getRowClassName = (params: GridRowParams) => {
@@ -255,7 +197,6 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
   };
 
   const handleStatusToggle = async (companyId: number, currentStatus: 'liked' | 'ignored' | 'none') => {
-    console.log(`Toggle status for company ${companyId} from ${currentStatus}`);
     
     // Get collection IDs dynamically from collections prop
     const likedCollection = collections?.find(c => c.collection_name === 'Liked Companies List');
@@ -338,95 +279,10 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     }
   };
 
-  const handleRowExpand = (rowId: number) => {
-    const newExpandedRows = new Set(expandedRows);
-    if (expandedRows.has(rowId)) {
-      newExpandedRows.delete(rowId);
-    } else {
-      newExpandedRows.add(rowId);
-    }
-    setExpandedRows(newExpandedRows);
-  };
   
-  // Handle column filter menu
-  const handleFilterClick = (event: React.MouseEvent<HTMLElement>, field: string) => {
-    event.stopPropagation();
-    setFilterMenuAnchor(event.currentTarget);
-    setActiveFilterField(field);
-  };
-  
-  const handleFilterChange = (filter: ColumnFilter | null) => {
-    if (filter) {
-      setColumnFilters(prev => ({ ...prev, [filter.field]: filter }));
-    } else {
-      setColumnFilters(prev => {
-        const newFilters = { ...prev };
-        delete newFilters[activeFilterField];
-        return newFilters;
-      });
-    }
-  };
-  
-  const handleSortChange = (sort: ColumnSort | null) => {
-    if (sort && onSortModelChange) {
-      onSortModelChange(sort);
-    }
-    setColumnSort(sort);
-  };
-  
-  // Custom column header with filter icon
-  const renderColumnHeader = (field: string, label: string, fieldType: 'string' | 'number' | 'select' | 'year' = 'string') => {
-    const hasFilter = columnFilters[field];
-    const hasSort = columnSort?.field === field;
-    
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-        <Typography variant="body2" sx={{ flex: 1 }}>
-          {label}
-        </Typography>
-        {hasSort && (
-          <IconButton size="small" sx={{ ml: 0.5 }}>
-            {columnSort?.sort === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />}
-          </IconButton>
-        )}
-        <IconButton
-          size="small"
-          onClick={(e) => handleFilterClick(e, field)}
-          sx={{ 
-            ml: 0.5,
-            color: hasFilter ? 'primary.main' : 'text.secondary',
-          }}
-        >
-          <FilterListIcon fontSize="small" />
-        </IconButton>
-      </Box>
-    );
-  };
 
   // Column definitions with enhanced visual design
   const columns: GridColDef[] = [
-    {
-      field: 'expand',
-      headerName: '',
-      width: 40,
-      sortable: false,
-      disableColumnMenu: true,
-      renderCell: (params: GridRenderCellParams) => (
-        <IconButton
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleRowExpand(params.row.id);
-          }}
-          sx={{
-            transform: expandedRows.has(params.row.id) ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.2s',
-          }}
-        >
-          <GridExpandMoreIcon fontSize="small" />
-        </IconButton>
-      ),
-    },
     {
       field: 'status',
       headerName: 'Status',
@@ -476,7 +332,9 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       headerName: 'Company Name',
       width: 250,
       minWidth: 200,
-      renderHeader: () => renderColumnHeader('company_name', 'Company Name', 'string'),
+      sortable: true,
+      headerClassName: 'sticky-column-header',
+      cellClassName: 'sticky-column-cell',
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ 
           display: 'flex', 
@@ -500,7 +358,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'industry',
       headerName: 'Industry',
       width: 150,
-      renderHeader: () => renderColumnHeader('industry', 'Industry', 'select'),
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         params.value ? (
           <Chip
@@ -516,7 +374,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'founded_year',
       headerName: 'Founded',
       width: 100,
-      renderHeader: () => renderColumnHeader('founded_year', 'Founded', 'year'),
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         <Typography variant="body2">{params.value || 'N/A'}</Typography>
       ),
@@ -525,7 +383,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'employee_count',
       headerName: 'Employees',
       width: 120,
-      renderHeader: () => renderColumnHeader('employee_count', 'Employees', 'number'),
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <PeopleIcon fontSize="small" sx={{ color: 'text.secondary' }} />
@@ -537,7 +395,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'total_funding',
       headerName: 'Funding',
       width: 120,
-      renderHeader: () => renderColumnHeader('total_funding', 'Funding', 'number'),
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           <AttachMoneyIcon fontSize="small" sx={{ color: 'success.main' }} />
@@ -551,7 +409,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'company_stage',
       headerName: 'Stage',
       width: 120,
-      renderHeader: () => renderColumnHeader('company_stage', 'Stage', 'select'),
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         params.value ? (
           <Chip
@@ -567,6 +425,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'location',
       headerName: 'Location',
       width: 150,
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         params.value ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -599,6 +458,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'revenue',
       headerName: 'Revenue',
       width: 120,
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         <Typography variant="body2" sx={{ fontWeight: 500 }}>
           {formatCurrency(params.value)}
@@ -609,6 +469,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
       field: 'valuation',
       headerName: 'Valuation',
       width: 120,
+      sortable: true,
       renderCell: (params: GridRenderCellParams) => (
         <Typography variant="body2" sx={{ fontWeight: 500, color: 'primary.main' }}>
           {formatCurrency(params.value)}
@@ -644,73 +505,6 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     },
   ];
 
-  const renderExpandedRow = (company: ICompany) => (
-    <Collapse in={expandedRows.has(company.id)} unmountOnExit>
-      <Box sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined" sx={{ height: '100%' }}>
-              <CardContent>
-                <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <InfoIcon fontSize="small" />
-                  Quick Details
-                </Typography>
-                {company.description && (
-                  <Typography variant="body2" sx={{ mb: 1, color: 'text.secondary' }}>
-                    {company.description.length > 150 
-                      ? `${company.description.substring(0, 150)}...` 
-                      : company.description
-                    }
-                  </Typography>
-                )}
-                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                  {company.technologies && (
-                    <Chip label={company.technologies} size="small" variant="outlined" />
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Card variant="outlined" sx={{ height: '100%' }}>
-              <CardContent>
-                <Typography variant="subtitle2" sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  <AttachMoneyIcon fontSize="small" />
-                  Financial Summary
-                </Typography>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Revenue</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {formatCurrency(company.revenue)}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Valuation</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {formatCurrency(company.valuation)}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Last Round</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {company.last_funding_round || 'N/A'}
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Amount</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {formatCurrency(company.last_funding_amount)}
-                    </Typography>
-                  </Box>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      </Box>
-    </Collapse>
-  );
 
   const handleColumnVisibilityChange = (field: string) => {
     setColumnVisibilityModel(prev => ({
@@ -727,7 +521,16 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
     } else {
       setLoading(true);
       try {
-        const allIds = await getAllCompanyIdsInCollection(selectedCollectionId);
+        let allIds: number[];
+        
+        if (searchQuery) {
+          // When searching, get filtered IDs from search endpoint
+          allIds = await searchCompanyIds(searchQuery, selectedCollectionId);
+        } else {
+          // When not searching, get all IDs from collection
+          allIds = await getAllCompanyIdsInCollection(selectedCollectionId);
+        }
+        
         selectAll(allIds);
       } catch (error) {
         console.error('Error selecting all:', error);
@@ -735,10 +538,10 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
         setLoading(false);
       }
     }
-  }, [isAllSelected, clearSelection, selectAll, selectedCollectionId]);
+  }, [isAllSelected, clearSelection, selectAll, selectedCollectionId, searchQuery]);
 
   return (
-    <Box sx={{ height: 'calc(100vh - 250px)', width: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ height: 'calc(100vh - 120px)', width: '100%', display: 'flex', flexDirection: 'column' }}>
       <Menu
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
@@ -753,8 +556,8 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           <ListItemText>View Details</ListItemText>
         </MenuItem>
       </Menu>
-      {/* Selection controls */}
-      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* Selection controls - Fixed at top */}
+      <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           {selectedCompanyIds.size > 0 && (
             <Chip
@@ -774,12 +577,30 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
               }}
             />
           )}
+          {searchQuery && (
+            <Chip
+              label={`Filtered: "${searchQuery}"`}
+              size="small"
+              onDelete={() => setSearchQuery && setSearchQuery('')}
+              sx={{
+                bgcolor: '#e3f2fd',
+                color: '#1976d2',
+                fontWeight: 500,
+                maxWidth: 300,
+                '& .MuiChip-label': {
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                },
+              }}
+            />
+          )}
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             variant="text"
             size="small"
-            onClick={() => setAnchorEl(null)} // Placeholder for column visibility menu
+            onClick={(e) => setColumnMenuAnchor(e.currentTarget)}
             sx={{
               textTransform: 'none',
               color: '#1a73e8',
@@ -807,8 +628,14 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
         </Box>
       </Box>
 
-      {/* Data Table */}
-      <Box sx={{ flex: 1, width: '100%', overflow: 'hidden' }}>
+      {/* Data Table - Scrollable container */}
+      <Box sx={{ 
+        flex: 1, 
+        minWidth: 0, // This is important to allow the container to shrink
+        overflow: 'auto', // Changed from 'hidden' to 'auto' to enable scrolling
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
         <DataGrid
           rows={response}
           columns={columns}
@@ -816,24 +643,17 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
           columnHeaderHeight={48}
           columnVisibilityModel={columnVisibilityModel}
           onColumnVisibilityModelChange={setColumnVisibilityModel}
-          autoHeight={false}
           sortingMode="server"
+          disableColumnMenu={false}
           sortModel={sortModel ? [sortModel] : []}
           onSortModelChange={(model) => {
+            const newSort = model.length > 0 ? model[0] as any : null;
+            // Update local state to trigger data fetch
+            setColumnSort(newSort);
+            // Also update parent state for persistence
             if (onSortModelChange) {
-              onSortModelChange(model.length > 0 ? model[0] as any : null);
+              onSortModelChange(newSort);
             }
-          }}
-          sx={{ 
-            '& .MuiDataGrid-virtualScroller': {
-              overflowX: 'auto',
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              minWidth: '100%',
-            },
-            '& .MuiDataGrid-row': {
-              minWidth: '100%',
-            },
           }}
           initialState={{
             pagination: {
@@ -885,23 +705,80 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
               setLastSelectedId(clickedId);
             }
           }}
-          slotProps={{
-            row: {
-              onMouseEnter: (event: React.MouseEvent<HTMLElement>) => {
-                const rowId = Number((event.currentTarget as HTMLElement).dataset.id);
-                setHoveredRow(rowId);
-              },
-              onMouseLeave: () => {
-                setHoveredRow(null);
-              },
-            },
-          }}
+          slotProps={{}}
           sx={{
+            height: '100%',
             border: 'none',
-            userSelect: 'none', // Prevent text selection
+            userSelect: 'none',
+            // Sticky columns for status and company name
+            '& .MuiDataGrid-cell[data-field="status"]': {
+              position: 'sticky !important',
+              left: '0 !important',
+              zIndex: 100,
+              backgroundColor: '#ffffff !important',
+              borderRight: '1px solid #e0e0e0',
+              willChange: 'transform',
+              transform: 'translateZ(0)',
+              isolation: 'isolate',
+            },
+            '& .MuiDataGrid-columnHeader[data-field="status"]': {
+              position: 'sticky !important',
+              left: '0 !important',
+              zIndex: 101,
+              backgroundColor: '#fafafa !important',
+              borderRight: '1px solid #e0e0e0',
+              willChange: 'transform',
+              transform: 'translateZ(0)',
+            },
+            '& .MuiDataGrid-cell[data-field="company_name"]': {
+              position: 'sticky !important',
+              left: '80px !important', // Width of status column
+              zIndex: 99,
+              backgroundColor: '#ffffff !important',
+              borderRight: '1px solid #e0e0e0',
+              willChange: 'transform',
+              transform: 'translateZ(0)',
+              isolation: 'isolate',
+            },
+            '& .MuiDataGrid-columnHeader[data-field="company_name"]': {
+              position: 'sticky !important',
+              left: '80px !important', // Width of status column
+              zIndex: 100,
+              backgroundColor: '#fafafa !important',
+              borderRight: '1px solid #e0e0e0',
+              willChange: 'transform',
+              transform: 'translateZ(0)',
+            },
+            // Alternate row colors for sticky columns
+            '& .MuiDataGrid-row:nth-of-type(even) .MuiDataGrid-cell[data-field="status"]': {
+              backgroundColor: '#fafafa !important',
+            },
+            '& .MuiDataGrid-row:nth-of-type(even) .MuiDataGrid-cell[data-field="company_name"]': {
+              backgroundColor: '#fafafa !important',
+            },
+            // Hover states for sticky columns
+            '& .MuiDataGrid-row:hover .MuiDataGrid-cell[data-field="status"]': {
+              backgroundColor: 'rgb(216, 230, 248) !important',
+            },
+            '& .MuiDataGrid-row:hover .MuiDataGrid-cell[data-field="company_name"]': {
+              backgroundColor: 'rgb(216, 230, 248) !important',
+            },
+            // Selected row states for sticky columns
+            '& .row-selected .MuiDataGrid-cell[data-field="status"]': {
+              backgroundColor: 'rgba(26, 115, 232, 0.08) !important',
+            },
+            '& .row-selected .MuiDataGrid-cell[data-field="company_name"]': {
+              backgroundColor: 'rgba(26, 115, 232, 0.08) !important',
+            },
+            '& .row-selected:hover .MuiDataGrid-cell[data-field="status"]': {
+              backgroundColor: 'rgba(26, 115, 232, 0.12) !important',
+            },
+            '& .row-selected:hover .MuiDataGrid-cell[data-field="company_name"]': {
+              backgroundColor: 'rgba(26, 115, 232, 0.12) !important',
+            },
             '& .MuiDataGrid-row': {
               cursor: 'pointer',
-              userSelect: 'none', // Prevent text selection in rows
+              userSelect: 'none',
               '&:hover': {
                 bgcolor: 'rgba(26, 115, 232, 0.04)',
               },
@@ -913,7 +790,7 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
               },
             },
             '& .MuiDataGrid-cell': {
-              userSelect: 'none', // Prevent text selection in cells
+              userSelect: 'none',
               borderBottom: '1px solid #f0f0f0',
             },
             '& .MuiDataGrid-columnHeaders': {
@@ -935,54 +812,50 @@ const EnhancedCompanyTable: React.FC<EnhancedCompanyTableProps> = ({
                 color: '#1a73e8',
               },
             },
-            // Zebra striping for better readability
             '& .MuiDataGrid-row:nth-of-type(even)': {
               bgcolor: '#fafafa',
-            },
-          }}
-          components={{
-            Row: ({ children, ...props }) => {
-              const company = response.find(c => c.id === props.row.id);
-              return (
-                <div>
-                  <div {...props}>
-                    {children}
-                  </div>
-                  {company && renderExpandedRow(company)}
-                </div>
-              );
             },
           }}
         />
       </Box>
       
-      {/* Column Filter Menu */}
-      <ColumnFilterMenu
-        anchorEl={filterMenuAnchor}
-        open={Boolean(filterMenuAnchor)}
-        onClose={() => setFilterMenuAnchor(null)}
-        field={activeFilterField}
-        fieldType={
-          activeFilterField === 'company_name' ? 'string' :
-          activeFilterField === 'industry' ? 'select' :
-          activeFilterField === 'company_stage' ? 'select' :
-          activeFilterField === 'founded_year' ? 'year' :
-          activeFilterField === 'employee_count' ? 'number' :
-          activeFilterField === 'total_funding' ? 'number' :
-          activeFilterField === 'revenue' ? 'number' :
-          activeFilterField === 'valuation' ? 'number' :
-          'string'
-        }
-        currentFilter={columnFilters[activeFilterField]}
-        currentSort={columnSort?.field === activeFilterField ? columnSort : undefined}
-        onFilterChange={handleFilterChange}
-        onSortChange={handleSortChange}
-        availableOptions={
-          activeFilterField === 'industry' ? availableIndustries :
-          activeFilterField === 'company_stage' ? availableStages :
-          []
-        }
-      />
+      {/* Column Visibility Menu */}
+      <Menu
+        anchorEl={columnMenuAnchor}
+        open={Boolean(columnMenuAnchor)}
+        onClose={() => setColumnMenuAnchor(null)}
+        slotProps={{
+          paper: {
+            sx: { maxHeight: 400, width: 250 }
+          }
+        }}
+      >
+        <Typography variant="subtitle2" sx={{ px: 2, py: 1 }}>
+          Show/Hide Columns
+        </Typography>
+        <Divider />
+        {[
+          { field: 'industry', label: 'Industry' },
+          { field: 'founded_year', label: 'Founded' },
+          { field: 'employee_count', label: 'Employees' },
+          { field: 'total_funding', label: 'Funding' },
+          { field: 'company_stage', label: 'Stage' },
+          { field: 'location', label: 'Location' },
+          { field: 'revenue', label: 'Revenue' },
+          { field: 'valuation', label: 'Valuation' },
+        ].map(col => (
+          <MenuItem
+            key={col.field}
+            onClick={() => handleColumnVisibilityChange(col.field)}
+          >
+            <Checkbox
+              checked={columnVisibilityModel[col.field] !== false}
+              size="small"
+            />
+            <ListItemText primary={col.label} />
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 };

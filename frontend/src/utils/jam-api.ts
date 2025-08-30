@@ -320,3 +320,17 @@ export async function getCompanyStages(): Promise<string[]> {
         throw error;
     }
 }
+
+export async function searchCompanyIds(query: string, collectionId?: string): Promise<number[]> {
+    try {
+        const params: any = { q: query };
+        if (collectionId) {
+            params.collection_id = collectionId;
+        }
+        const response = await axios.get(`${BASE_URL}/search/ids`, { params });
+        return response.data.company_ids;
+    } catch (error) {
+        console.error('Error fetching search IDs:', error);
+        throw error;
+    }
+}
