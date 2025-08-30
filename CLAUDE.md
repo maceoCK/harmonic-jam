@@ -4,23 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-A fullstack application for managing company collections with a Python FastAPI backend and React/TypeScript frontend.
+A fullstack application for managing company collections with bulk operations, featuring a Python FastAPI backend and React/TypeScript frontend with Material-UI.
 
 ## Architecture
 
 ### Backend (FastAPI + PostgreSQL)
-- **Entry Point**: `backend/main.py` - FastAPI app with automatic database seeding
+- **Entry Point**: `backend/main.py` - FastAPI app with automatic database seeding and CORS configuration
 - **Database Models**: `backend/backend/db/database.py` - SQLAlchemy models for Company, CompanyCollection, and associations
 - **API Routes**: 
-  - `/companies` - Paginated company listing with liked status
-  - `/collections` - Collection management and company fetching by collection
-- **Auto-seeding**: On first run, creates 10,000 companies with 3 pre-configured collections
+  - `/companies` - Paginated company listing with liked/ignored status
+  - `/companies/check-statuses` - Check which companies have liked/ignored statuses
+  - `/companies/check-conflicts` - Check for conflicts before bulk operations
+  - `/collections` - Collection management with bulk add/remove operations
+  - `/collections/{id}/companies/bulk-add` - Bulk add companies to collection
+  - `/collections/{id}/companies/bulk-remove` - Bulk remove companies from collection
+  - `/ws/operations/{id}` - WebSocket endpoint for real-time operation progress
+- **Auto-seeding**: On first run, creates 10,000 companies with 3 pre-configured collections (My List, Liked Companies List, Companies to Ignore List)
 
 ### Frontend (React + TypeScript + Vite)
-- **Entry Point**: `frontend/src/App.tsx` - Main app with Material-UI theming
-- **API Client**: `frontend/src/utils/jam-api.ts` - Axios-based API wrapper
-- **Components**: Company table with MUI DataGrid for pagination and display
-- **Styling**: Tailwind CSS + Material-UI dark theme
+- **Entry Point**: `frontend/src/App.tsx` - Main app with Google Docs-inspired light theme
+- **API Client**: `frontend/src/utils/jam-api.ts` - Axios-based API wrapper with TypeScript interfaces
+- **Key Components**: 
+  - `EnhancedCompanyTable` - MUI DataGrid with custom selection, status toggles, and keyboard shortcuts
+  - `BulkActionBar` - Context-aware bulk actions (Like, Ignore, Clear Statuses, Delete)
+  - `ConflictResolutionDialog` - Handle conflicts when moving companies between collections
+  - `ClearStatusesDialog` - Review dialog showing affected companies by status
+  - `ProgressModal` - Real-time progress tracking for bulk operations via WebSocket
+- **Features**:
+  - Multi-select with shift-click and Ctrl/Cmd-click
+  - Keyboard shortcuts (Ctrl+A select all, Delete remove, Escape clear)
+  - Status cycling (none → liked → ignored → none)
+  - Context-specific bulk actions per collection
+  - Real-time progress updates for bulk operations
+- **Styling**: Material-UI light theme with Google Docs-inspired design
 
 ## Commands
 
@@ -88,16 +104,20 @@ SELECT * FROM company_collections;
 
 ### Backend
 - **Database URL**: Set via `DATABASE_URL` env var in docker-compose.yml
-- **CORS**: Configured for `http://localhost:5173` (frontend dev server)
+- **CORS**: Configured for `http://localhost:5173-5175` (frontend dev servers)
 - **Ports**: API on 8000, debugpy on 5678, PostgreSQL on 5433
 
 ### Frontend
 - **API Base URL**: Hardcoded to `http://localhost:8000` in `jam-api.ts`
 - **Vite Config**: Uses React SWC plugin for fast refresh
+- **Selection Context**: Global state management for multi-select operations
 
 ## Development Notes
 
 - Database includes a deliberate throttle trigger (100ms delay) on `company_collection_associations` inserts to simulate slow updates
 - Backend auto-seeds on startup if `harmonic_settings.seeded` is not present
-- Frontend uses MUI DataGrid for efficient handling of large datasets
-- Collections sidebar dynamically updates URL params for state management
+- Collection IDs are dynamically generated - use collection names for identification
+- Frontend uses MUI DataGrid (free version) with custom selection implementation
+- Collections sidebar shows real-time counts for each collection
+- Bulk operations support WebSocket progress tracking
+- Clear Statuses feature only processes companies with actual statuses, not all selected

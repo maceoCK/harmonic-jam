@@ -2,15 +2,16 @@ import "./App.css";
 
 import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
-import { Snackbar, Alert, Box, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Chip, Container } from "@mui/material";
+import { Snackbar, Alert, Box, Paper, Typography, List, ListItem, ListItemButton, ListItemText, Chip } from "@mui/material";
 import { useEffect, useState, useCallback } from "react";
-import CompanyTable from "./components/CompanyTable";
 import EnhancedCompanyTable from "./components/EnhancedCompanyTable";
 import BulkActionBar from "./components/BulkActionBar";
 import ConfirmationDialog from "./components/ConfirmationDialog";
 import ConflictResolutionDialog, { ConflictInfo } from "./components/ConflictResolutionDialog";
 import ClearStatusesDialog from "./components/ClearStatusesDialog";
 import ProgressModal from "./components/ProgressModal";
+import CompanyDetailDrawer from "./components/CompanyDetailDrawer";
+import SmartSearchBar from "./components/SmartSearchBar";
 import { 
   getCollectionsMetadata, 
   bulkAddCompanies, 
@@ -18,7 +19,8 @@ import {
   getAllCompanyIdsInCollection,
   checkConflicts,
   checkStatuses,
-  IConflictCheckResponse,
+  ICompany,
+  getCompanyById,
 } from "./utils/jam-api";
 import useApi from "./utils/useApi";
 import useWebSocket from "./hooks/useWebSocket";
@@ -143,23 +145,6 @@ const lightTheme = createTheme({
         },
       },
     },
-    MuiDataGrid: {
-      styleOverrides: {
-        root: {
-          border: 'none',
-          '& .MuiDataGrid-cell': {
-            borderBottom: '1px solid #e8eaed',
-          },
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: '#f8f9fa',
-            borderBottom: '1px solid #e8eaed',
-          },
-          '& .MuiDataGrid-footerContainer': {
-            borderTop: '1px solid #e8eaed',
-          },
-        },
-      },
-    },
   },
 });
 
@@ -185,6 +170,14 @@ function AppContent() {
     message: string;
     severity: 'success' | 'error' | 'info' | 'warning';
   }>({ open: false, message: '', severity: 'info' });
+  
+  // New state for rich company data features
+  const [selectedCompany, setSelectedCompany] = useState<ICompany | null>(null);
+  const [companyDetailOpen, setCompanyDetailOpen] = useState(false);
+  
+  // Search and sort state
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortModel, setSortModel] = useState<{ field: string; sort: 'asc' | 'desc' } | null>(null);
   
   const [conflictDialog, setConflictDialog] = useState<{
     open: boolean;
@@ -219,6 +212,21 @@ function AppContent() {
   });
   
   const { selectAll, clearSelection, getSelectedIds, selectedCompanyIds } = useSelection();
+  
+  const handleCompanySelect = useCallback(async (company: ICompany) => {
+    try {
+      // Fetch full company details if needed
+      const fullCompany = await getCompanyById(company.id);
+      setSelectedCompany(fullCompany);
+      setCompanyDetailOpen(true);
+    } catch (error) {
+      console.error('Error fetching company details:', error);
+      // Fallback to using the partial data
+      setSelectedCompany(company);
+      setCompanyDetailOpen(true);
+    }
+  }, []);
+  
   
   const handleClearStatuses = useCallback(async (companyIds: number[]) => {
     const likedCollection = collectionResponse?.find(c => c.collection_name === 'Liked Companies List');
@@ -489,7 +497,7 @@ function AppContent() {
   }, [clearSelection]);
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', bgcolor: '#f8f9fa' }}>
+    <Box sx={{ display: 'flex', height: '100vh', width: '100vw', bgcolor: '#f8f9fa', margin: 0, padding: 0, overflow: 'auto' }}>
       {/* Sidebar */}
       <Paper
         elevation={0}
@@ -499,6 +507,7 @@ function AppContent() {
           bgcolor: 'background.paper',
           display: 'flex',
           flexDirection: 'column',
+          margin: 0,
         }}
       >
         {/* Logo/Title */}
@@ -561,7 +570,7 @@ function AppContent() {
       </Paper>
 
       {/* Main Content */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff' }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', bgcolor: '#ffffff', minWidth: 0 }}>
         {selectedCollectionId && collectionResponse && (
           <>
             {/* Action Bar - Only show container when items selected */}
@@ -579,11 +588,24 @@ function AppContent() {
               </Box>
             )}
             
+            {/* Search Bar */}
+            <Box sx={{ p: 2, borderBottom: '1px solid #e8eaed' }}>
+              <SmartSearchBar 
+                onSearch={setSearchQuery}
+                placeholder="Search companies using natural language (e.g., 'fintech in NYC', 'series B with >100 employees')"
+              />
+            </Box>
+            
             {/* Table */}
-            <Box sx={{ flex: 1, p: 2, overflow: 'hidden' }}>
+            <Box sx={{ flex: 1, p: 2}}>
               <EnhancedCompanyTable 
                 selectedCollectionId={selectedCollectionId}
                 collections={collectionResponse}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                sortModel={sortModel}
+                onSortModelChange={setSortModel}
+                onCompanySelect={handleCompanySelect}
               />
             </Box>
           </>
@@ -611,7 +633,7 @@ function AppContent() {
             return;
           }
 
-          const { conflictInfo, targetCollectionId, companyIds } = conflictDialog;
+          const { conflictInfo, targetCollectionId } = conflictDialog;
           if (!conflictInfo) return;
 
           let idsToAdd: number[] = [];
@@ -658,6 +680,15 @@ function AppContent() {
         webSocketMessage={lastMessage}
         initialTotal={currentOperation?.total}
         initialProcessed={currentOperation?.processed}
+      />
+      
+      <CompanyDetailDrawer
+        company={selectedCompany}
+        open={companyDetailOpen}
+        onClose={() => {
+          setCompanyDetailOpen(false);
+          setSelectedCompany(null);
+        }}
       />
       
       <Snackbar
