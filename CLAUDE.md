@@ -8,7 +8,7 @@ A fullstack application for managing company collections with bulk operations, f
 
 ## Architecture
 
-### Backend (FastAPI + PostgreSQL)
+### Backend (FastAPI + PostgreSQL + Elasticsearch)
 - **Entry Point**: `backend/main.py` - FastAPI app with automatic database seeding and CORS configuration
 - **Database Models**: `backend/backend/db/database.py` - SQLAlchemy models for Company, CompanyCollection, and associations
 - **API Routes**: 
@@ -18,7 +18,11 @@ A fullstack application for managing company collections with bulk operations, f
   - `/collections` - Collection management with bulk add/remove operations
   - `/collections/{id}/companies/bulk-add` - Bulk add companies to collection
   - `/collections/{id}/companies/bulk-remove` - Bulk remove companies from collection
+  - `/search` - Elasticsearch-powered natural language search
+  - `/search/ids` - Search and return only company IDs for bulk operations
+  - `/search/suggest` - Autocomplete suggestions for search queries
   - `/ws/operations/{id}` - WebSocket endpoint for real-time operation progress
+- **Search Engine**: Elasticsearch integration for advanced text search and aggregations
 - **Auto-seeding**: On first run, creates 10,000 companies with 3 pre-configured collections (My List, Liked Companies List, Companies to Ignore List)
 
 ### Frontend (React + TypeScript + Vite)
